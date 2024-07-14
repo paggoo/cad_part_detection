@@ -31,7 +31,7 @@ def isolate_one_part_per_product(file_name):
 
 
 #get_products(extract_lines("../data/robo_cell.step"))
-isolate_one_part_per_product("../data/robo_cell.step")
+#isolate_one_part_per_product("../data/robo_cell.step")
 #isolate_one_part_per_product("../data/Montain_BIKE_LUIGI.stp")
-#isolate_one_part_per_product("../data/3D_Printer_Enclosure_DanielDesigns.step")
+isolate_one_part_per_product("../data/3D_Printer_Enclosure_DanielDesigns.step")
 

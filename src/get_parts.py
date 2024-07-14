@@ -9,7 +9,7 @@ from subprocess import PIPE, Popen, run
 def extract_parts(lines):
     part = np.array([('0', '', '', 0, 0, '')], dtype=(
     [('id', 'S99'), ('name', 'S99'), ('empty', 'S99'), ('parent_product', 'int32'), ('something', 'int32'),
-     ('dollar', '|S1')]))
+     ('dollar', 'S99')]))
     parts = np.vstack(part)
     parts = np.delete(parts, 0)
     #parts = np.append(parts, part2)
@@ -59,20 +59,23 @@ def delete_leaf(part_id: str, lines, debug=False):
         if line_content.__contains__("NEXT_ASSEMBLY_USAGE_OCCURRENCE"):  # NEXT_ASSEMBLY_USAGE_OCCURRENCE('id','name','...
             # if lines[line].__contains__("PRODUCT_RELATED_PRODUCT_CATEGORY('part'") & lines[line].__contains__(str(curr_id)):  # vorige id
             if curr_id == line_content.split("'")[1]:
-                end_cut = line_id
+#                end_cut = line_id
+                lines.__delitem__(line_id)      #try removing only this line
+                number_cut_lines = 1
                 break
-    number_cut_lines = 0
-    for l_id in range(end_cut, 0, -1):   # indexes after the removal gap will be lowered, index before is unchanged
-        line_content = lines[l_id]
-        lines.__delitem__(l_id)
-        #line_content = lines[l_id - number_cut_lines]
-        #lines.__delitem__(l_id - number_cut_lines)
-        number_cut_lines += 1
-        if line_content.__contains__("CONTEXT_DEPENDENT_SHAPE_REPRESENTATION"):
-            # PRODUCT_RELATED_PRODUCT_CATEGORY('part',  && contains curr_id
-            # PRODUCT_DEFINITION(
-            # SHAPE_DEFINITION_REPRESENTATION
-            break
+    # for l_id in range(end_cut, 0, -1):   # indexes after the removal gap will be lowered, index before is unchanged
+    #     line_content = lines[l_id]
+    #     if line_content.__contains__("NEXT_ASSEMBLY_USAGE_OCCURRENCE"):
+    #         break       # in case multi NAUOs in sequence
+    #     lines.__delitem__(l_id)
+    #     #line_content = lines[l_id - number_cut_lines]
+    #     #lines.__delitem__(l_id - number_cut_lines)
+    #     number_cut_lines += 1
+    #     if line_content.__contains__("CONTEXT_DEPENDENT_SHAPE_REPRESENTATION"):
+    #         # PRODUCT_RELATED_PRODUCT_CATEGORY('part',  && contains curr_id
+    #         # PRODUCT_DEFINITION(
+    #         # SHAPE_DEFINITION_REPRESENTATION
+    #         break
     leaves = np.delete(leaves, leaves_idx, axis=0)
     if debug:
         print("del_id:" + str(part_id) + "/" + str(len(leaves)) + ", del#lines:" + str(
@@ -112,8 +115,8 @@ def delete_leaf(part_id: str, lines, debug=False):
 def delete_product(entry_id: int, lines):
     for i in range(len(lines)):
         li = lines[i]
-        if li.startswith("#" + str(entry_id)) and li.__contains__("PRODUCT_DEFINITION('design'"):
-            lines.__delitem__(i)    # TODO delete surrounding lines
+        if li.startswith("#" + str(entry_id)) and li.__contains__("PRODUCT_DEFINITION('"):
+            lines.__delitem__(i)
             break
     return lines
 
@@ -221,7 +224,9 @@ def isolate_all_parts(file_name):
 #import_export("../data/r285__.step")
 #l = delete_leaf(281, extract_lines("../data/r285__n.step"))
 #l = delete_leaf(282, l)
-#write_file(l, "../data/r281-2+5.step")
+#l = delete_leaf('Ikea Lack:1', extract_lines("../data/3D_Printer_Enclosure_DanielDesigns.step"))
+
+#write_file(l, "../data/3d del1.step")
 #isolate_one_part(0, "../data/2balls small.step")
 #var = extract_part_names(extract_lines("../data/robo_cell.step"))
 #var2 = extract_part_names(extract_lines("../data/robo_cell_transformed_rem01.step"))
