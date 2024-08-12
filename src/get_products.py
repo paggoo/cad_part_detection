@@ -26,12 +26,14 @@ def isolate_one_part_per_product(file_name):
             product_ids.discard(int(leaf[4]))
             pass
     for l_id in leaves_ids:
-        isolate_one_leaf(l_id, file_name)
+        isolate_one_leaf(l_id, file_name, debug=True)            #remove debug
     print("successfully isolated " + str(len(leaves_ids)) + " leaves.")
 
 
 #get_products(extract_lines("../data/robo_cell.step"))
 #isolate_one_part_per_product("../data/robo_cell.step")
 #isolate_one_part_per_product("../data/Montain_BIKE_LUIGI.stp")
+
 isolate_one_part_per_product("../data/3D_Printer_Enclosure_DanielDesigns.step")
 
+#isolate_one_leaf('Back panel:1', "../data/3D_Printer_Enclosure_DanielDesigns.step", debug=True)

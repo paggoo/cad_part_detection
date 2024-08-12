@@ -14,7 +14,7 @@ def extract_parts(lines):
     parts = np.delete(parts, 0)
     #parts = np.append(parts, part2)
        # each part has tree_id, name, parent component it belongs to
-    for line_id in range(len(lines) - 1):
+    for line_id in range(len(lines)):
         line = lines[line_id]
         if line.__contains__("NEXT_ASSEMBLY_USAGE_OCCURRENCE"):
             p = extract_next_assembly_usage_occurrence_params(line)
@@ -26,7 +26,7 @@ def extract_leaves(lines):  # a part is leaf if not referenced by any other (fol
     parts = extract_parts(lines)
     leaves = parts
     deleted_counter = 0
-    for n in range(len(parts) - 1):      # we have to run n forward in order to exclude parents of parents
+    for n in range(len(parts)):      # we have to run n forward in order to exclude parents of parents
         product = parts[n][4]
         for other_part in parts:
             parent = other_part[3]
@@ -54,7 +54,7 @@ def delete_leaf(part_id: str, lines, debug=False):
     curr_name = leaf[1].decode('utf8')
     parent_product = int(leaf[3])
     curr_product = int(leaf[4])
-    for line_id in range(len(lines) - 1):
+    for line_id in range(len(lines)):
         line_content = lines[line_id]
         if line_content.__contains__("NEXT_ASSEMBLY_USAGE_OCCURRENCE"):  # NEXT_ASSEMBLY_USAGE_OCCURRENCE('id','name','...
             # if lines[line].__contains__("PRODUCT_RELATED_PRODUCT_CATEGORY('part'") & lines[line].__contains__(str(curr_id)):  # vorige id
@@ -128,7 +128,7 @@ def delete_product(entry_id: int, lines):
 #     begin_cut = 0
 #     curr_id = 0
 # #    curr = entry_ids[part_id]
-#     for line in range(len(lines) - 1):
+#     for line in range(len(lines)):
 #         if lines[line].__contains__("PRODUCT_RELATED_PRODUCT_CATEGORY('part'") & lines[line].__contains__(str(curr_id)):  # vorige id
 #             begin_cut = line
 #             break
@@ -153,26 +153,39 @@ def isolate_one_leaf(leaf_id: str, file_name, debug=False):
     else:
         if debug:
             print(str(len(leaves)) + " leaves in total.")
-    i = 0
-    while len(leaves) > 1:
+            print("attempting to isolate part: " + str(leaf_id))
+    # delete all except the relevant leaf
+    while len(leaves) >= 1:
         leaf_ids = leaves[:, 0]
-        if leaf_ids[i].decode('utf8') != str(leaf_id):
-            l_id = leaf_ids[i].decode('utf8')
+        if leaf_ids[0].decode('utf8') != str(leaf_id):  # index does not have to increase because deletion
+            l_id = leaf_ids[0].decode('utf8')
             lines = delete_leaf(l_id, lines)
-            leaves = np.delete(leaves, i, axis=0)
+            leaves = np.delete(leaves, 0, axis=0)
         else:
-            leaf_name = leaves[i, 1].decode('utf8')
-            i += 1
+            leaf = leaves[0]
+            leaf_name = leaf[1].decode('utf8')
+            leaves = np.delete(leaves, 0, axis=0)
     suffix = '.' + file_name.split('.')[-1]
-    name_before_import_export = file_name.removesuffix(suffix) + str(leaf_id) + "_" + str(leaf_name) + "_raw" + suffix
-    write_file(lines, name_before_import_export)
-    import_export(name_before_import_export)    # generate a valid minimized export
     try:
-        exists = os.path.exists(name_before_import_export)
-        if exists:
-            os.remove(name_before_import_export)
-    except:
-        pass    #file not there
+        leaf_name
+    except NameError:   # 'leaf_name' not associated with a value
+        leaf_name = leaves[0, 1].decode('utf8')
+    if leaf_name is None:
+        print("check if leaves is empty")
+        return
+    else:
+        if str(leaf_id) == str(leaf_name):
+            name_before_import_export = file_name.removesuffix(suffix) + "_" + str(leaf_name) + "_raw" + suffix
+        else:
+            name_before_import_export = file_name.removesuffix(suffix) + str(leaf_id) + "_" + str(leaf_name) + "_raw" + suffix
+        write_file(lines, name_before_import_export)
+        import_export(name_before_import_export)    # generate a valid minimized export
+        try:
+            exists = os.path.exists(name_before_import_export)
+            if exists:
+                os.remove(name_before_import_export)
+        except:
+            pass    #file not there
 
 
 def import_export(file_path):  # ((run freecad import export))

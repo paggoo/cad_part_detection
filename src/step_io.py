@@ -41,7 +41,7 @@ def extract_next_assembly_usage_occurrence_params(line):
     dollar = line.split("'")[6].split(',')[3].split(')')[0]
     part = np.array([(tree_id, name, empty, parent_product, product, dollar)], dtype=(
     [('id', 'S99'), ('name', 'S99'), ('empty', 'S99'), ('parent_product', 'int32'), ('something', 'int32'),
-     ('dollar', '|S1')]))
+     ('dollar', 'S99')]))
     return part
 
 
