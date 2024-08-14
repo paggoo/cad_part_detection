@@ -8,7 +8,7 @@ from subprocess import PIPE, Popen, run
 
 def extract_parts(lines):
     part = np.array([('0', '', '', 0, 0, '')], dtype=(
-    [('id', 'S99'), ('name', 'S99'), ('empty', 'S99'), ('parent_product', 'int32'), ('something', 'int32'),
+    [('id', 'S99'), ('name', 'S99'), ('empty', 'S99'), ('parent_product', 'int32'), ('product', 'int32'),
      ('dollar', 'S99')]))
     parts = np.vstack(part)
     parts = np.delete(parts, 0)
@@ -87,9 +87,15 @@ def delete_leaf(part_id: str, lines, debug=False):
     for l in leaves:
         if int(l[4]) == curr_product:
             further_instances_of_product = True
+            matching_entry = l[0]
             break
     if not further_instances_of_product:
         lines = delete_product(curr_product, lines)
+        if debug:
+            print("product " + str(curr_product) + " deleted.")
+    else:
+        if debug:
+            print("product " + str(curr_product) + " not deleted, because referenced by part " + str(matching_entry))
 
     # if no further children of parent part, delete parent part
     further_child_under_parent = False
@@ -115,9 +121,12 @@ def delete_leaf(part_id: str, lines, debug=False):
 def delete_product(entry_id: int, lines):
     for i in range(len(lines)):
         li = lines[i]
-        if li.startswith("#" + str(entry_id)) and li.__contains__("PRODUCT_DEFINITION('"):
-            lines.__delitem__(i)
-            break
+        prefix = "#" + str(entry_id)
+        if li.startswith(prefix):
+            linekey = li.replace(' ', '').removeprefix(prefix+'=')
+            if linekey.startswith("PRODUCT_DEFINITION('"):
+                lines.__delitem__(i)
+                break
     return lines
 
 
@@ -162,8 +171,7 @@ def isolate_one_leaf(leaf_id: str, file_name, debug=False):
             lines = delete_leaf(l_id, lines)
             leaves = np.delete(leaves, 0, axis=0)
         else:
-            leaf = leaves[0]
-            leaf_name = leaf[1].decode('utf8')
+            leaf_name = leaves[0, 1].decode('utf8')
             leaves = np.delete(leaves, 0, axis=0)
     suffix = '.' + file_name.split('.')[-1]
     try:
@@ -183,6 +191,7 @@ def isolate_one_leaf(leaf_id: str, file_name, debug=False):
         try:
             exists = os.path.exists(name_before_import_export)
             if exists:
+                pass
                 os.remove(name_before_import_export)
         except:
             pass    #file not there

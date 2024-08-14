@@ -33,14 +33,14 @@ def extract_data(lines):  #data segment of step file
 
 def extract_next_assembly_usage_occurrence_params(line):
     #TODO regex matching for names including , # ; \n ()
-    tree_id = line.split("'")[1]  # tree_id can be used to construct the whole tree of all parts
+    id = line.split("'")[1]  # tree_id can sometimes be used to construct the whole tree of all parts
     name = line.split("'")[3]
     empty = line.split("'")[5]
     parent_product = int(line.split("'")[6].split(',')[1].removeprefix(' ').removeprefix(' ').removeprefix('#'))
     product = int(line.split("'")[6].split(',')[2].removeprefix(' ').removeprefix(' ').removeprefix('#'))
     dollar = line.split("'")[6].split(',')[3].split(')')[0]
-    part = np.array([(tree_id, name, empty, parent_product, product, dollar)], dtype=(
-    [('id', 'S99'), ('name', 'S99'), ('empty', 'S99'), ('parent_product', 'int32'), ('something', 'int32'),
+    part = np.array([(id, name, empty, parent_product, product, dollar)], dtype=(
+    [('id', 'S99'), ('name', 'S99'), ('empty', 'S99'), ('parent_product', 'int32'), ('product', 'int32'),
      ('dollar', 'S99')]))
     return part
 

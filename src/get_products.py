@@ -34,6 +34,6 @@ def isolate_one_part_per_product(file_name):
 #isolate_one_part_per_product("../data/robo_cell.step")
 #isolate_one_part_per_product("../data/Montain_BIKE_LUIGI.stp")
 
-isolate_one_part_per_product("../data/3D_Printer_Enclosure_DanielDesigns.step")
+#isolate_one_part_per_product("../data/3D_Printer_Enclosure_DanielDesigns.step")
 
-#isolate_one_leaf('Back panel:1', "../data/3D_Printer_Enclosure_DanielDesigns.step", debug=True)
+#isolate_one_leaf('NAUO3', "../data/Montain_BIKE_LUIGI.stp", debug=True)
