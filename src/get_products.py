@@ -32,8 +32,29 @@ def isolate_one_part_per_product(file_name):
 
 #get_products(extract_lines("../data/robo_cell.step"))
 #isolate_one_part_per_product("../data/robo_cell.step")
-#isolate_one_part_per_product("../data/Montain_BIKE_LUIGI.stp")
-
 #isolate_one_part_per_product("../data/3D_Printer_Enclosure_DanielDesigns.step")
+#isolate_one_part_per_product("../data/Montain_BIKE_LUIGI.stp")
+#isolate_one_part_per_product("../data/high_speed_gantry_auto_screw_asm.stp")
+isolate_one_part_per_product("../data/Electric_motor.stp")
+print("-------------------------------------------------------------------------------------------------------------------------------------------------")
+isolate_one_part_per_product("../data/9304_3_8_.stp")
+print("-------------------------------------------------------------------------------------------------------------------------------------------------")
+isolate_one_part_per_product("../data/255_v2.stp")
+print("-------------------------------------------------------------------------------------------------------------------------------------------------")
+isolate_one_part_per_product("../data/bycicle.stp")
+print("-------------------------------------------------------------------------------------------------------------------------------------------------")
+isolate_one_part_per_product("../data/vesp.stp")
+print("-------------------------------------------------------------------------------------------------------------------------------------------------")
+isolate_one_part_per_product("../data/STEEL_PLATFORM_HAND_TRUCK.stp")
+print("-------------------------------------------------------------------------------------------------------------------------------------------------")
+isolate_one_part_per_product("../data/Eurokastenwagen.stp")
+print("-------------------------------------------------------------------------------------------------------------------------------------------------")
+isolate_one_part_per_product("../data/Caliper_True_Dimension_Configurator.stp")
+print("-------------------------------------------------------------------------------------------------------------------------------------------------")
+isolate_one_part_per_product("../data/sheet_metal_rack.STEP")
+
+
+
+
 
 #isolate_one_leaf('NAUO3', "../data/Montain_BIKE_LUIGI.stp", debug=True)
