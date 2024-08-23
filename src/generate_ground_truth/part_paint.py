@@ -1,15 +1,13 @@
 
 from __future__ import print_function
 import os
-import platform
-from pathlib import Path
 from time import sleep
-from file_io import write_file
-from step_io import insert_hash_entry, find_all_advanced_faces_entries, get_highest_hash_entry, extract_lines
+from src.io.file_io import write_file
+from src.io.step_io import insert_hash_entry, find_all_advanced_faces_entries, get_highest_hash_entry, extract_lines
 import os.path
-from view_stp import view_stp, close_stp_viewer
-from pynput.keyboard import Key, Listener
-import numpy
+from view_stp import view_stp
+from pynput.keyboard import Listener
+
 
 #category: normbauteile: fasteners
 

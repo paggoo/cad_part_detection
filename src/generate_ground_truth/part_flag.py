@@ -10,6 +10,7 @@ from pynput.keyboard import Key, Listener
 
 def flag_parts(path):
     # manual differenciation if this part belongs to the classified class (fastener) or not
+    viewer_processes = []
     full_path = os.path.abspath(path)
     for file_name in os.listdir(path):        #toggle manually selecting parts
         full_path_to_file = os.path.join(full_path, file_name)
@@ -29,12 +30,13 @@ def flag_parts(path):
             except:
                 pass  # special key pressed
 
-        viewer_process = view_stp(full_path_to_file)
+        viewer_processes.append(view_stp(full_path_to_file))
         sleep(1)
-        print("does this part belong to the desired class?: press y or n \n")
+        print(str(file_name) + " Does this part belong to the desired class?: press y or n \n")
         with Listener(on_release=on_release) as listener:
             listener.join()
-    close_stp_viewer(viewer_process)
+    for v in viewer_processes:
+        close_stp_viewer(v)
 
 
 def flag_part(full_path_to_file, is_standard_component):
@@ -47,7 +49,15 @@ def flag_part(full_path_to_file, is_standard_component):
     os.rename(full_path_to_file, full_path_and_new_name)
 
 
-flag_parts("../data/baugruppen/high_speed_gantry/products_string")
+#flag_parts("../data/baugruppen/high_speed_gantry/products_string")
+flag_parts("../../data/baugruppen/wheel_loader/products")
+
 #full = os.path.abspath("../data/baugruppen/high_speed_gantry/products_string/high_speed_gantry_auto_screw_asm0_Next assembly relationship.stp")
 #flag_part(full, True)
 
+# viewer_process = view_stp("../data/baugruppen/high_speed_gantry/products/high_speed_gantry_auto_screw_asm0_Next assembly relationship.stp")
+# sleep(10)
+# viewer_process_ = view_stp("../data/baugruppen/high_speed_gantry/products/high_speed_gantry_auto_screw_asm135_Next assembly relationship.stp")
+# sleep(10)
+# close_stp_viewer(viewer_process)
+# close_stp_viewer(viewer_process_)

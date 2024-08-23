@@ -1,15 +1,15 @@
 #isolate every part
 import numpy as np
 import os
-from file_io import write_file
-from step_io import extract_lines, extract_next_assembly_usage_occurrence_params
-from subprocess import PIPE, Popen, run
+from src.io.file_io import write_file
+from src.io.step_io import extract_lines, extract_next_assembly_usage_occurrence_params
+from subprocess import PIPE, Popen
 
 
 def extract_parts(lines):
-    part = np.array([('0', '', '', 0, 0, '')], dtype=(
+    part = np.array([('0', '', '', 0, 0, '', 0)], dtype=(
     [('id', 'S99'), ('name', 'S99'), ('empty', 'S99'), ('parent_product', 'int32'), ('product', 'int32'),
-     ('dollar', 'S99')]))
+     ('dollar', 'S99'), ('entry_id', 'int32')]))
     parts = np.vstack(part)
     parts = np.delete(parts, 0)
     #parts = np.append(parts, part2)
@@ -34,21 +34,23 @@ def extract_leaves(lines):  # a part is leaf if not referenced by any other (fol
                 leaves = np.delete(leaves, n - deleted_counter, axis=0)
                 deleted_counter += 1
                 break
+    # generate uid for each leaf repopulating the part_id field in a way that ensures uniqueness
+    for i in range(len(leaves)):
+        leaves[i][0] = bytes(i)
     return leaves
 
 
-def delete_leaf(part_id: str, lines, debug=False):
-    # remove id-th element from extract_leaves
+def delete_leaf(leaf_uid: int, lines, debug=False):
     leaves = extract_leaves(lines)
-    leaves_ids = leaves[:, 0]
-    if part_id.encode("utf8") not in leaves_ids:
+    leaves_uids = leaves[:, 6].astype(int)
+    if leaf_uid not in leaves_uids:
         if debug:
-            print("given id is no leaf. ignoring")
+            print("given uid is no leaf. ignoring")
         return lines
     leaf = None
     for leaves_idx in range(len(leaves)):
         leaf = leaves[leaves_idx]
-        if leaf[0].decode('utf8') == str(part_id):
+        if int(leaf[6]) == leaf_uid:
             break
     curr_id = leaf[0].decode('utf8')
     curr_name = leaf[1].decode('utf8')
@@ -59,10 +61,11 @@ def delete_leaf(part_id: str, lines, debug=False):
         if line_content.__contains__("NEXT_ASSEMBLY_USAGE_OCCURRENCE"):  # NEXT_ASSEMBLY_USAGE_OCCURRENCE('id','name','...
             # if lines[line].__contains__("PRODUCT_RELATED_PRODUCT_CATEGORY('part'") & lines[line].__contains__(str(curr_id)):  # vorige id
             if curr_id == line_content.split("'")[1]:
-#                end_cut = line_id
-                lines.__delitem__(line_id)      #try removing only this line
-                number_cut_lines = 1
-                break
+                if leaf_uid == int(line_content.removeprefix('#').split('=')[0]):
+    #                end_cut = line_id
+                    lines.__delitem__(line_id)      #try removing only this line
+                    number_cut_lines = 1
+                    break
     # for l_id in range(end_cut, 0, -1):   # indexes after the removal gap will be lowered, index before is unchanged
     #     line_content = lines[l_id]
     #     if line_content.__contains__("NEXT_ASSEMBLY_USAGE_OCCURRENCE"):
@@ -78,16 +81,16 @@ def delete_leaf(part_id: str, lines, debug=False):
     #         break
     leaves = np.delete(leaves, leaves_idx, axis=0)
     if debug:
-        print("del_id:" + str(part_id) + "/" + str(len(leaves)) + ", del#lines:" + str(
+        print("del_id:" + str(curr_id) + "/" + str(len(leaves)) + ", del#lines:" + str(
             number_cut_lines) + ", remain#lines:" + str(len(lines)) + ", del_part:" + str(curr_name))
 
     # if no further instances of that product, delete product
     further_instances_of_product = False
     # find further instances
-    for l in leaves:
-        if int(l[4]) == curr_product:
+    for le in leaves:
+        if int(le[4]) == curr_product:
             further_instances_of_product = True
-            matching_entry = l[0]
+            matching_entry = le[0]
             break
     if not further_instances_of_product:
         lines = delete_product(curr_product, lines)
@@ -106,13 +109,13 @@ def delete_leaf(part_id: str, lines, debug=False):
             break
     if not further_child_under_parent:
         leaves = extract_leaves(lines)  # parent has become leaf now
-        parent_part_id = '-1'
-        # find parent part_id
+        parent_part_uid = '-1'
+        # find parent part_uid
         for le in leaves:
             if int(le[4]) == parent_product:
-                parent_part_id = str(le[0])
+                parent_part_uid = str(le[6])
                 break
-        lines = delete_leaf(parent_part_id, lines)
+        lines = delete_leaf(parent_part_uid, lines)
         if debug:
             print("parent deleted.")
     return lines
@@ -152,7 +155,7 @@ def delete_product(entry_id: int, lines):
 #     return lines
 
 
-def isolate_one_leaf(leaf_id: str, file_name, debug=False):
+def isolate_one_leaf(leaf_uid: int, file_name, debug=False):
     #remove all leaves except one
     lines = extract_lines(file_name)
     leaves = extract_leaves(lines)
@@ -162,16 +165,16 @@ def isolate_one_leaf(leaf_id: str, file_name, debug=False):
     else:
         if debug:
             print(str(len(leaves)) + " leaves in total.")
-            print("attempting to isolate part: " + str(leaf_id))
+            print("attempting to isolate part: " + str(leaf_uid))
     # delete all except the relevant leaf
     while len(leaves) >= 1:
-        leaf_ids = leaves[:, 0]
-        if leaf_ids[0].decode('utf8') != str(leaf_id):  # index does not have to increase because deletion
-            l_id = leaf_ids[0].decode('utf8')
-            lines = delete_leaf(l_id, lines)
+        if leaf_uid != int(leaves[0, 6]):  # index does not have to increase because deletion
+            lines = delete_leaf(int(leaves[0, 6]), lines)
             leaves = np.delete(leaves, 0, axis=0)
         else:
+            leaf_id = leaves[0, 0].decode('utf8')
             leaf_name = leaves[0, 1].decode('utf8')
+            leaf_product = leaves[0, 4].decode('utf8')
             leaves = np.delete(leaves, 0, axis=0)
     suffix = '.' + file_name.split('.')[-1]
     try:
@@ -182,10 +185,13 @@ def isolate_one_leaf(leaf_id: str, file_name, debug=False):
         print("check if leaves is empty")
         return
     else:
+        # product is always populated and should be used to prevent files being overwritten if leaf_name = ''
+        leaf_id = str(leaf_id).replace('/', '_').replace('\\', "_")  # file name must not contain folder seperators
+        leaf_name = str(leaf_name).replace('/', '_').replace('\\', "_")  # file name must not contain folder seperators
         if str(leaf_id) == str(leaf_name):
-            name_before_import_export = file_name.removesuffix(suffix) + "_" + str(leaf_name) + "_raw" + suffix
+            name_before_import_export = file_name.removesuffix(suffix) + "_" + str(leaf_uid) + '_' + leaf_name + '_' + leaf_product + "_raw" + suffix
         else:
-            name_before_import_export = file_name.removesuffix(suffix) + str(leaf_id) + "_" + str(leaf_name) + "_raw" + suffix
+            name_before_import_export = file_name.removesuffix(suffix) + "_" + str(leaf_uid) + '_' + leaf_id + "_" + leaf_name + '_' + leaf_product + "_raw" + suffix
         write_file(lines, name_before_import_export)
         import_export(name_before_import_export)    # generate a valid minimized export
         try:
