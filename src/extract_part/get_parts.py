@@ -1,9 +1,35 @@
 #isolate every part
+import pathlib
+
 import numpy as np
 import os
 from src.io.file_io import write_file
 from src.io.step_io import extract_lines, extract_next_assembly_usage_occurrence_params
 from subprocess import PIPE, Popen
+
+
+def extract_solids(lines):
+    solids = []
+    for l in lines:
+        if l.__contains__('MANIFOLD_SOLID_BREP'):
+            solids.append(l)
+    return solids
+
+
+def isolate_one_solid(s: str, solids, lines, file_name):
+    #remove all solids but matching
+    solid_id = int(s.removeprefix('#').split('=')[0])
+    for a in solids:
+        if s != a:
+            #remove solid a from lines
+            for i in range(len(lines) - 1):
+                if a == lines[i]:
+                    lines.__delitem__(i)
+    suffix = '.' + file_name.split('.')[-1]
+    stem = file_name.removesuffix(suffix)
+    new_file_name = os.path.join(stem + str(solid_id) + suffix)
+    write_file(lines, new_file_name)
+    import_export(new_file_name)
 
 
 def extract_parts(lines):
@@ -160,7 +186,7 @@ def isolate_one_leaf(leaf_uid: int, file_name, debug=False):
     lines = extract_lines(file_name)
     leaves = extract_leaves(lines)
     if len(leaves) == 0:
-        print("no parts")
+        print("no parts.")
         return
     else:
         if debug:
@@ -206,7 +232,7 @@ def isolate_one_leaf(leaf_uid: int, file_name, debug=False):
 def import_export(file_path):  # ((run freecad import export))
     full_file_path = os.path.abspath(file_path)
     suffix = '.' + full_file_path.split('.')[-1]
-    output_path = full_file_path.removesuffix("_raw"+suffix) + suffix
+    output_path = full_file_path.removesuffix("_raw").removesuffix(suffix) + suffix
     command = "import Part\n"
     command += "s = Part.Shape()\n"
     command += "s.read('" + str(full_file_path) + "')\n"
@@ -215,12 +241,18 @@ def import_export(file_path):  # ((run freecad import export))
     Popen(['freecadcmd'], stdin=PIPE, text=True).communicate(command)
 
 
-def isolate_all_parts(file_name):
-    lines = extract_lines(file_name)
-    leaf_ids = extract_leaves(lines)[:, 0]
-    for l_id in leaf_ids:
-        isolate_one_leaf(int(l_id), file_name)
-        print("isolated leaf: " + str(l_id))
+# def isolate_all_parts(file_name):
+#     lines = extract_lines(file_name)
+#     leaves = extract_leaves(lines)
+#     if 0 != len(leaves):
+#         leaf_ids = leaves[:, 0]
+#         for l_id in leaf_ids:
+#             isolate_one_leaf(int(l_id), file_name)
+#             print("isolated leaf: " + str(l_id))
+#     else:
+#         solids = extract_solids(lines)
+#         for s in solids:
+#             isolate_one_solid(s, lines, file_name)
 
 
 # print (extract_part_names("../data/2balls small edit.step"))
