@@ -49,8 +49,10 @@ def find_product_representative(product_id: int, leaves):
 
 def isolate_products_from_folder(path):
     for file in pathlib.Path(path).rglob('*'):
-        if file.is_file() and str(file).endswith('.stp'):
-            isolate_one_part_per_product(str(file))
+        if file.is_file():
+            suffix = str(file).split('.')[-1]
+            if suffix.lower() == 'stp' or suffix.lower() == 'step':
+                isolate_one_part_per_product(str(file))
 
 
 #get_products(extract_lines("../data/robo_cell.step"))
@@ -80,7 +82,6 @@ def isolate_products_from_folder(path):
 
 
 isolate_products_from_folder("../../data/t")
-
 
 
 

@@ -232,7 +232,7 @@ def isolate_one_leaf(leaf_uid: int, file_name, debug=False):
 def import_export(file_path):  # ((run freecad import export))
     full_file_path = os.path.abspath(file_path)
     suffix = '.' + full_file_path.split('.')[-1]
-    output_path = full_file_path.removesuffix("_raw").removesuffix(suffix) + suffix
+    output_path = full_file_path.removesuffix(suffix).removesuffix("_raw") + suffix
     command = "import Part\n"
     command += "s = Part.Shape()\n"
     command += "s.read('" + str(full_file_path) + "')\n"
