@@ -3,7 +3,7 @@
 # these might be defined by a common product thus saving storage
 import pathlib
 
-from get_parts import extract_leaves, isolate_one_leaf, extract_solids, isolate_one_solid
+from src.extract_part.get_parts import extract_leaves, isolate_one_leaf, extract_solids, isolate_one_solid
 from src.io.step_io import extract_lines
 
 
@@ -36,9 +36,10 @@ def isolate_one_part_per_product(file_name):
         i = 1
         for leaf_uid in product_representatives_leaves_uids:
             print("isolating product_representative " + str(i) + "/" + str(len(product_representatives_leaves_uids)))  # progress
-            isolate_one_leaf(leaf_uid, file_name, debug=False)           # toggle debug
+            isolated_parts_folder = isolate_one_leaf(leaf_uid, file_name, debug=False)           # toggle debug
             i += 1
         print("successfully isolated " + str(len(product_representatives_leaves_uids)) + " leaves.")
+    return isolated_parts_folder
 
 
 def find_product_representative(product_id: int, leaves):

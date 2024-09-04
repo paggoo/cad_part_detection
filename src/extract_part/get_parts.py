@@ -231,6 +231,7 @@ def isolate_one_leaf(leaf_uid: int, file_name, debug=False):
                 os.remove(path_and_name_before_import_export)
         except:
             pass    #file not there
+    return parts_dir
 
 
 def import_export(file_path):  # ((run freecad import export))

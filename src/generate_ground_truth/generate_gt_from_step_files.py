@@ -6,11 +6,13 @@ import os.path
 import numpy as np
 import multiprocessing
 from functools import partial
+
+from src.generate_datasets.merge_chunks import merge_chunks
 from src.point_cloud.stl_to_multiview import stl_to_multiview
 from build_dictionaries import make_screw_gt_dictionary
 
 
-def build_dataset(path, num_views=3, view_size=80, chunk_size=100):  # saving every chunk_size samples reduces memory usage
+def build_gt_dataset(path, num_views=3, view_size=80, chunk_size=100):  # saving every chunk_size samples reduces memory usage
     data = []
     labels = []
     dict_path = make_screw_gt_dictionary(path, 'screw', 'no_screw')
@@ -36,7 +38,7 @@ def build_dataset(path, num_views=3, view_size=80, chunk_size=100):  # saving ev
             sample_count += 1
 
             # for reasons of low memory only keep chunk in memory
-            if sample_count >= chunk_size:
+            if data and labels and sample_count >= chunk_size:
                 data = np.concatenate(data, axis=0)
                 labels = np.concatenate(labels, axis=0)
 
@@ -53,7 +55,7 @@ def build_dataset(path, num_views=3, view_size=80, chunk_size=100):  # saving ev
                 chunk_index += 1
 
     # save remainder and free mem
-    if sample_count > 0:
+    if data and labels and sample_count > 0:
         data = np.concatenate(data, axis=0)
         labels = np.concatenate(labels, axis=0)
 
@@ -72,36 +74,9 @@ def build_dataset(path, num_views=3, view_size=80, chunk_size=100):  # saving ev
     return merge_chunks(path)
 
 
-def merge_chunks(path):
-    chunk_dir = os.path.join(path, 'chunks')
-    chunk_files = sorted([f for f in os.listdir(chunk_dir) if f.startswith('data_chunk')])
-
-    data = []
-    labels = []
-
-    for chunk_file in chunk_files:
-        data_chunk = np.load(os.path.join(chunk_dir, chunk_file))
-        label_chunk = np.load(os.path.join(chunk_dir, chunk_file.replace('data', 'labels')))
-        data.append(data_chunk)
-        labels.append(label_chunk)
-
-    # combine several arrays
-    data = np.concatenate(data, axis=0)
-    labels = np.concatenate(labels, axis=0)
-
-    # save file
-    np.save(os.path.join(path, 'data.npy'), data)
-    np.save(os.path.join(path, 'labels.npy'), labels)
-
-    print(f"saved data.npy with shape {data.shape}")
-    print(f"saved labels.npy with shape {labels.shape}")
-
-    return data, labels
-
-
 def process_sample(line: str, view_size: int):
     data = []
-    labels = []
+    labels = []        # labels are here ground_truth values
     # li = line.split(',')            # cannot use split(',') since some file names contain this symbol
     p = line[:-3]                 # remove 0 or 1 and ,
     classification = line[-2]
@@ -114,5 +89,5 @@ def process_sample(line: str, view_size: int):
     return np.array(data), np.array(labels)
 
 
-build_dataset("../../data/convert/gt/screw_or_not/")
+build_gt_dataset("../../data/convert/gt/screw_or_not/")
 
