@@ -203,6 +203,9 @@ def isolate_one_leaf(leaf_uid: int, file_name, debug=False):
             leaf_product = leaves[0, 4].decode('utf8')
             leaves = np.delete(leaves, 0, axis=0)
     suffix = '.' + file_name.split('.')[-1]
+    # make directory for isolated parts
+    parts_dir = os.path.join(os.path.dirname(file_name), os.path.basename(file_name.removesuffix(suffix)))
+    os.makedirs(parts_dir, exist_ok=True)
     try:
         leaf_name
     except NameError:   # 'leaf_name' not associated with a value
@@ -215,16 +218,17 @@ def isolate_one_leaf(leaf_uid: int, file_name, debug=False):
         leaf_id = str(leaf_id).replace('/', '_').replace('\\', "_")  # file name must not contain folder seperators
         leaf_name = str(leaf_name).replace('/', '_').replace('\\', "_")  # file name must not contain folder seperators
         if str(leaf_id) == str(leaf_name):
-            name_before_import_export = file_name.removesuffix(suffix) + "_" + str(leaf_uid) + '_' + leaf_name + '_' + leaf_product + "_raw" + suffix
+            name_before_import_export = os.path.basename(file_name.removesuffix(suffix) + "_" + str(leaf_uid) + '_' + leaf_name + '_' + leaf_product + "_raw" + suffix)
         else:
-            name_before_import_export = file_name.removesuffix(suffix) + "_" + str(leaf_uid) + '_' + leaf_id + "_" + leaf_name + '_' + leaf_product + "_raw" + suffix
-        write_file(lines, name_before_import_export)
-        import_export(name_before_import_export)    # generate a valid minimized export
+            name_before_import_export = os.path.basename(file_name.removesuffix(suffix) + "_" + str(leaf_uid) + '_' + leaf_id + "_" + leaf_name + '_' + leaf_product + "_raw" + suffix)
+        path_and_name_before_import_export = os.path.join(parts_dir, name_before_import_export)
+        write_file(lines, path_and_name_before_import_export)
+        import_export(path_and_name_before_import_export)    # generate a valid minimized export
         try:
-            exists = os.path.exists(name_before_import_export)
+            exists = os.path.exists(path_and_name_before_import_export)
             if exists:
                 pass
-                os.remove(name_before_import_export)
+                os.remove(path_and_name_before_import_export)
         except:
             pass    #file not there
 

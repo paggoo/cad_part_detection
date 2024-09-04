@@ -78,11 +78,10 @@ def isolate_products_from_folder(path):
 # print("-------------------------------------------------------------------------------------------------------------------------------------------------")
 #isolate_one_part_per_product("../../data/baugruppen/wheel_loader/src/Wheel_loader.stp")
 #isolate_one_part_per_product("../../data/1-ASME B18.2.1 STUD BOLT ASME B18.2.2 HEX NUTS/01- 1 4 - 20 UNC/1 4 - 20 UNC.stp")
-
-
-
-isolate_products_from_folder("../../data/t")
-
-
-
 #isolate_one_leaf('NAUO3', "../data/Montain_BIKE_LUIGI.stp", debug=True)
+
+
+#isolate_products_from_folder("../../data/t")
+
+
+
