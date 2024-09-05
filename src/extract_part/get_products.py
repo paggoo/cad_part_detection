@@ -18,11 +18,12 @@ def get_products(lines, leaves):
 def isolate_one_part_per_product(file_name):
     lines = extract_lines(file_name)
     leaves = extract_leaves(lines)
+    isolated_parts_folder = None
     if 0 == len(leaves):
         solids = extract_solids(lines)
         for s in solids:
             lines_copy = lines.copy()      # do not reuse lines, each isolation needs to start fresh
-            isolate_one_solid(s, solids, lines_copy, file_name)
+            isolated_parts_folder = isolate_one_solid(s, solids, lines_copy, file_name)
     else:
         leaves_products = leaves[:, 4]
         product_ids = get_products(lines, leaves)
@@ -82,7 +83,7 @@ def isolate_products_from_folder(path):
 #isolate_one_leaf('NAUO3', "../data/Montain_BIKE_LUIGI.stp", debug=True)
 
 
-#isolate_products_from_folder("../../data/t")
+isolate_products_from_folder("../../data/convert/gt/screw_or_not/no_screw/other/")
 
 
 

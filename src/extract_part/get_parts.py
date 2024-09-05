@@ -16,7 +16,7 @@ def extract_solids(lines):
     return solids
 
 
-def isolate_one_solid(s: str, solids, lines, file_name):
+def isolate_one_solid(s: str, solids, lines, file_path_and_name):
     #remove all solids but matching
     solid_id = int(s.removeprefix('#').split('=')[0])
     for a in solids:
@@ -25,11 +25,16 @@ def isolate_one_solid(s: str, solids, lines, file_name):
             for i in range(len(lines) - 1):
                 if a == lines[i]:
                     lines.__delitem__(i)
-    suffix = '.' + file_name.split('.')[-1]
-    stem = file_name.removesuffix(suffix)
+    suffix = '.' + file_path_and_name.split('.')[-1]
+    stem = os.path.basename(file_path_and_name.removesuffix(suffix))
     new_file_name = os.path.join(stem + str(solid_id) + suffix)
-    write_file(lines, new_file_name)
-    import_export(new_file_name)
+    # make directory for isolated parts
+    isolated_parts_folder = os.path.join(os.path.dirname(file_path_and_name), stem)
+    os.makedirs(isolated_parts_folder, exist_ok=True)
+    new_file_path_and_name = os.path.join(isolated_parts_folder, new_file_name)
+    write_file(lines, new_file_path_and_name)
+    import_export(new_file_path_and_name)
+    return isolated_parts_folder
 
 
 def extract_parts(lines):
