@@ -3,6 +3,7 @@ import pathlib
 
 import numpy as np
 import os
+
 from src.io.file_io import write_file
 from src.io.step_io import extract_lines, extract_next_assembly_usage_occurrence_params
 from subprocess import PIPE, Popen
@@ -67,7 +68,7 @@ def extract_leaves(lines):  # a part is leaf if not referenced by any other (fol
                 break
     # generate uid for each leaf repopulating the part_id field in a way that ensures uniqueness
     for i in range(len(leaves)):
-        leaves[i][0] = bytes(i)
+        leaves[i][0] = i
     return leaves
 
 
@@ -228,7 +229,7 @@ def isolate_one_leaf(leaf_uid: int, file_name, debug=False):
             name_before_import_export = os.path.basename(file_name.removesuffix(suffix) + "_" + str(leaf_uid) + '_' + leaf_id + "_" + leaf_name + '_' + leaf_product + "_raw" + suffix)
         path_and_name_before_import_export = os.path.join(parts_dir, name_before_import_export)
         write_file(lines, path_and_name_before_import_export)
-        import_export(path_and_name_before_import_export)    # generate a valid minimized export
+        isolated_parts_file = import_export(path_and_name_before_import_export)    # generate a valid minimized export
         try:
             exists = os.path.exists(path_and_name_before_import_export)
             if exists:
@@ -236,7 +237,7 @@ def isolate_one_leaf(leaf_uid: int, file_name, debug=False):
                 os.remove(path_and_name_before_import_export)
         except:
             pass    #file not there
-    return parts_dir
+    return parts_dir, isolated_parts_file
 
 
 def import_export(file_path):  # ((run freecad import export))
@@ -249,6 +250,7 @@ def import_export(file_path):  # ((run freecad import export))
     command += "s.exportStep('" + str(output_path) + "')\n"
     command += "exit()\n"
     Popen(['freecadcmd'], stdin=PIPE, text=True).communicate(command)
+    return output_path
 
 
 # def isolate_all_parts(file_name):
