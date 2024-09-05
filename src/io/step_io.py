@@ -4,20 +4,26 @@ from src.io.file_io import get_lines, write_file
 
 
 def extract_lines(file_name):  # regex matching would prevent from part names that contain ; at end of a line
-    lines = get_lines(file_name)
-    line_buf = ""
-    lines_res = []
-    entry_complete = True
-    for line_id in range(len(lines)):
-        line = lines[line_id]
-        line_buf += line.removesuffix('\n')
-        if line_buf.endswith(';'):  # and lines[line_id + 1].startswith("#"):
-            lines_res.append(line_buf + '\n')
-            entry_complete = True
-            line_buf = ""
-        else:
-            entry_complete = False
-    return lines_res
+    lines = None
+    try:
+        lines = get_lines(file_name)
+    except:
+        print("ERROR reading file: non UTF-8 character encountered: " + str(file_name))
+        return None
+    if lines is not None:
+        line_buf = ""
+        lines_res = []
+        entry_complete = True
+        for line_id in range(len(lines)):
+            line = lines[line_id]
+            line_buf += line.removesuffix('\n')
+            if line_buf.endswith(';'):  # and lines[line_id + 1].startswith("#"):
+                lines_res.append(line_buf + '\n')
+                entry_complete = True
+                line_buf = ""
+            else:
+                entry_complete = False
+        return lines_res
 
 
 def extract_data(lines):  # data segment of step file
