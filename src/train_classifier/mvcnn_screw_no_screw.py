@@ -91,6 +91,6 @@ mvcnn_model.summary()
 mvcnn_model.fit(views, labels, epochs=12, batch_size=32, validation_split=0.2)
 
 # Save model
-model_save_path = os.path.join(path, 'mvcnn_screw_no_screw.keras')
+model_save_path = os.path.join(path, '../../models/mvcnn_screw_no_screw.keras')
 mvcnn_model.save(model_save_path)
 print(f"Model saved to {model_save_path}")
