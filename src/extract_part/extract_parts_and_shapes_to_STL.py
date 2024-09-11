@@ -1,6 +1,10 @@
 # based on https://github.com/marcofariasmx/STP-STEP-to-STL-Python-Converter/forks
 import pathlib
 import time
+from functools import partial
+from itertools import combinations
+
+import numpy as np
 import multiprocessing
 import concurrent.futures
 import threading
@@ -10,11 +14,29 @@ import os
 import platform
 import sys
 import glob
-from functools import partial
 from os import listdir
 from os.path import isfile, join
-
 import numpy
+
+
+accept_mirrored_parts = True
+
+
+def near(a, b):
+    if accept_mirrored_parts:
+        precision = 0.005
+    else:
+        precision = 0.00001
+    return abs(a - b) < precision * a
+
+
+def compare_length(a, b):
+    if accept_mirrored_parts:
+        precision = 0.0005
+    else:
+        precision = 0.0000001
+    return abs(len(a) - len(b)) < precision*len(a)
+
 
 if platform.system() == 'Windows':
     FREECADPATH = glob.glob(r"C:\Program Files\FreeCAD *\bin")
@@ -52,10 +74,6 @@ def export_shape(file_path, shape):
     # Mesh.export([pf], new_name)
 
 
-def near(a, b, precision=0.000001):
-    return abs(a - b) < precision * a
-
-
 def shapes_equal(a, b):       # this would copy every shape to compare with each other
                                                     # leading to n^2 copies
     if near(a.Volume, b.Volume):
@@ -64,38 +82,86 @@ def shapes_equal(a, b):       # this would copy every shape to compare with each
         common = a.common(b)
         if near(a.Volume, common.Volume):
             return True     # parts overlay each other well
-        if near(a.MemSize, b.MemSize) and near(a.Area, b.Area) and len(a.Edges) == len(b.Edges) and len(a.Faces) == len(b.Faces) and len(a.Wires) == len(b.Wires) and len(a.Vertexes) == len(b.Vertexes) and near(a.Length, b.Length) and near(a.Mass, b.Mass):
+        if near(a.MemSize, b.MemSize) and near(a.Area, b.Area) and compare_length(a.Edges, b.Edges) and compare_length(a.Faces, b.Faces) and compare_length(a.Wires, b.Wires) and compare_length(a.Vertexes, b.Vertexes) and near(a.Length, b.Length) and near(a.Mass, b.Mass):
             return True     # parts are probably rotated but have similar characteristics
     return False
 
 
-def find_duplicate_shapes(shapes, labels, precision=0.00001):           # keeps copy of shape_a and compare with other
-    shapes_duplicates = numpy.zeros(len(shapes))                   # indexes of duplicating shapes
-    shapes_volumes = [s.Volume for s in shapes]
-    print("calculated Volumes")
-    shapes_in_zero_placement = [s.copy() for s in shapes]
-    for s in shapes_in_zero_placement:
-        s.Placement = App.Placement(App.Vector(0, 0, 0), App.Vector(0, 0, 0), 0)
-        # s.transformShape(s.Placement.inverse().toMatrix(), True)   # this might be done in multiprocessing pool
-    print("transformed to zero placement")
-    for a in range(len(shapes_in_zero_placement)):
+def find_duplicates_in_chunk(start_index, shapes_in_zero_placement, shapes_volumes, labels, shapes_duplicates):
+    for a in range(start_index, len(shapes_in_zero_placement)):
         sha_a = shapes_in_zero_placement[a]
         a_volume = shapes_volumes[a]
         for b in range(a + 1, len(shapes_in_zero_placement)):
             sha_b = shapes_in_zero_placement[b]
             b_volume = shapes_volumes[b]
             if shapes_equal(sha_a, sha_b):
-                print("duplicate tuple: " + str(labels[a]) + ' , ' + str(labels[b]))
-                shapes_duplicates[b] = 1  # we do not include the occurance of b in a
-                # thus the first occurance is the persistent one
-                # turning the problem into binary relation
-                print(shapes_duplicates)
-                #     abs(a_volume - b_volume) < precision * a_volume:
-                # common = sha_a.common(sha_b)
-                # print(common.Volume)
-                # if abs(common.Volume - a_volume) < precision * a_volume:
-                #     dup(a, b)
-    return shapes_duplicates
+                print(f"duplicate tuple: {labels[a]} , {labels[b]}")
+                # shapes_duplicates[b] = 1
+
+
+def find_duplicates_for_pairs(a, b, shapes_in_zero_placement, shapes_volumes, labels, shapes_duplicates):
+    sha_a = shapes_in_zero_placement[a]
+    sha_b = shapes_in_zero_placement[b]
+
+    if shapes_equal(sha_a, sha_b):
+        print(f"duplicate tuple: {labels[a]} , {labels[b]}")
+        shapes_duplicates[b] = 1
+
+
+def find_duplicate_shapes(shapes, labels):
+    with multiprocessing.Manager() as manager:
+        # Use manager list for shared data between processes
+        shapes_duplicates = manager.list([0] * len(shapes))
+        shapes_volumes = [s.Volume for s in shapes]
+        print("calculated Volumes")
+
+        # Parallelize shape transformation to zero placement
+        with multiprocessing.Pool() as pool:
+            shapes_in_zero_placement = pool.map(copy_and_transform_shape, shapes)
+
+        print("transformed to zero placement")
+
+        # Generate all unique (a, b) pairs where a < b
+        all_pairs = list(combinations(range(len(shapes_in_zero_placement)), 2))
+
+        # Prepare arguments for each pair to be passed to starmap
+        args = [(a, b, shapes_in_zero_placement, shapes_volumes, labels, shapes_duplicates) for a, b in all_pairs]
+
+        # Parallelize the pairwise comparison across multiple processes
+        with multiprocessing.Pool() as pool:
+            pool.starmap(find_duplicates_for_pairs, args)
+
+        return np.array(shapes_duplicates)
+
+
+def copy_and_transform_shape(s):
+    s_copy = s.copy()
+    s_copy.Placement = App.Placement(App.Vector(0, 0, 0), App.Vector(0, 0, 0), 0)
+    return s_copy
+
+
+# def find_duplicate_shapes(shapes, labels):           # keeps copy of shape_a and compare with other
+#     shapes_duplicates = numpy.zeros(len(shapes))                   # indexes of duplicating shapes
+#     shapes_volumes = [s.Volume for s in shapes]
+#     print("calculated Volumes")
+#     shapes_in_zero_placement = [s.copy() for s in shapes]
+#     for s in shapes_in_zero_placement:
+#         s.Placement = App.Placement(App.Vector(0, 0, 0), App.Vector(0, 0, 0), 0)
+#         # s.transformShape(s.Placement.inverse().toMatrix(), True)   # this might be done in multiprocessing pool
+#     print("transformed to zero placement")
+#     for a in range(len(shapes_in_zero_placement)):
+#         sha_a = shapes_in_zero_placement[a]
+#         a_volume = shapes_volumes[a]
+#         for b in range(a + 1, len(shapes_in_zero_placement)):
+#             sha_b = shapes_in_zero_placement[b]
+#             b_volume = shapes_volumes[b]
+#             if shapes_equal(sha_a, sha_b):
+#                 print("duplicate tuple: " + str(labels[a]) + ' , ' + str(labels[b]))
+#                 shapes_duplicates[b] = 1  # we do not include the occurance of b in a
+#                 # thus the first occurance is the persistent one
+#                 # turning the problem into binary relation
+#                 print(shapes_duplicates)
+#     return shapes_duplicates
 
 
 def compare_and_remove_duplicates(sha_a, shapes, start_idx):
@@ -139,6 +205,7 @@ def remove_duplicates_multithreaded(shapes):
 
 
 def isolate_to_stl(file_path):
+    start_time = time.time()        #for performance measurements
     file_path = os.path.abspath(file_path)
     suffix = '.' + str(file_path).split('.')[-1]
     without_suffix = str(file_path).removesuffix(suffix)
@@ -148,45 +215,85 @@ def isolate_to_stl(file_path):
     App.loadFile(file_path)
     doc = App.activeDocument()
 
-    # doc.Objects gives us all leaves, we like to remove duplicate parts of same product
-    product_representatives_leaves_uids = set()   # must be a set since we want a single part representing each product
-    product_ids = []
-    shapes = [o.Shape for o in doc.Objects if (
-                hasattr(o, 'Shape') and o.Shape.Solids and not o.isDerivedFrom('PartDesign::Feature') and not hasattr(o,
-                                                                                                                      'Type'))]
-    objects = [o for o in doc.Objects if (
-                hasattr(o, 'Shape') and o.Shape.Solids and not o.isDerivedFrom('PartDesign::Feature') and not hasattr(o,
-                                                                                                                      'Type'))]
-    # if len(shapes) >= 1:
-    #     for sha_a in shapes:
-    #         for sha_b in shapes[1:]:                                # compare all other with a
-    #             if shapes_equal(sha_a, sha_b):
-    #                 shapes.remove(sha_b)                            # prevents duplicate stl exports
-    #                 print(len(shapes))
+    shapes = [o.Shape for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids
+                                               and not o.isDerivedFrom('PartDesign::Feature')
+                                               and not hasattr(o, 'Type'))]
+    objects = [o for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids
+                                          and not o.isDerivedFrom('PartDesign::Feature')
+                                          and not hasattr(o, 'Type'))]
     labels = [o.Label for o in objects]
+
+    # Find duplicates in shapes using multiprocessing
     duplicates = find_duplicate_shapes(shapes, labels)
 
+    # Remove duplicates
     for i in range(len(shapes) - 1, -1, -1):
         if duplicates[i]:
-            shapes.__delitem__(i)
             objects.__delitem__(i)
-            print(shapes)
-    print("done removing duplicates.")
-    # remove_duplicates_multithreaded(shapes)
+
+    print(f"{sum(duplicates)} duplicates removed.")
+    print(f"{len(objects)} remaining parts.")
 
     for obj in objects:
         export_object_to_stl(obj, file_path)
-        # # Check if the object is a root object (not used by any other objects)
-        # if not obj.InList:
-        #     if obj.TypeId == 'App::DocumentObjectGroup' or obj.Group is not None:
-        #         # If it's a root group, export objects inside
-        #         for sub_obj in obj.Group:
-        #             export_object_to_stl(sub_obj, without_suffix, prefix=obj.Label + "_")
-        #     else:
-        #         # If it's a single root body
-        #         export_object_to_stl(obj, without_suffix)
+
     print("done isolating parts.")
+
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(f"Execution time: {execution_time} seconds")
     return os.path.dirname(file_path)
+
+# def isolate_to_stl(file_path):
+#     file_path = os.path.abspath(file_path)
+#     suffix = '.' + str(file_path).split('.')[-1]
+#     without_suffix = str(file_path).removesuffix(suffix)
+#
+#     print("Converting File: " + file_path)
+#     App.addImportType("STEP with colors (*.step *.stp)", "Import")
+#     App.loadFile(file_path)
+#     doc = App.activeDocument()
+#
+#     # doc.Objects gives us all leaves, we like to remove duplicate parts of same product
+#     product_representatives_leaves_uids = set()   # must be a set since we want a single part representing each product
+#     product_ids = []
+#     shapes = [o.Shape for o in doc.Objects if (
+#                 hasattr(o, 'Shape') and o.Shape.Solids and not o.isDerivedFrom('PartDesign::Feature') and not hasattr(o,
+#                                                                                                                       'Type'))]
+#     objects = [o for o in doc.Objects if (
+#                 hasattr(o, 'Shape') and o.Shape.Solids and not o.isDerivedFrom('PartDesign::Feature') and not hasattr(o,
+#                                                                                                                       'Type'))]
+#     # if len(shapes) >= 1:
+#     #     for sha_a in shapes:
+#     #         for sha_b in shapes[1:]:                                # compare all other with a
+#     #             if shapes_equal(sha_a, sha_b):
+#     #                 shapes.remove(sha_b)                            # prevents duplicate stl exports
+#     #                 print(len(shapes))
+#     labels = [o.Label for o in objects]
+#     duplicates = find_duplicate_shapes(shapes, labels)
+#
+#     for i in range(len(shapes) - 1, -1, -1):
+#         if duplicates[i]:
+#             shapes.__delitem__(i)
+#             objects.__delitem__(i)
+#             print(shapes)
+#     print(str(sum(duplicates)) + " duplicates removed.")
+#     print(str(len(shapes)) + " remaining parts.")
+#     # remove_duplicates_multithreaded(shapes)
+#
+#     for obj in objects:
+#         export_object_to_stl(obj, file_path)
+#         # # Check if the object is a root object (not used by any other objects)
+#         # if not obj.InList:
+#         #     if obj.TypeId == 'App::DocumentObjectGroup' or obj.Group is not None:
+#         #         # If it's a root group, export objects inside
+#         #         for sub_obj in obj.Group:
+#         #             export_object_to_stl(sub_obj, without_suffix, prefix=obj.Label + "_")
+#         #     else:
+#         #         # If it's a single root body
+#         #         export_object_to_stl(obj, without_suffix)
+#     print("done isolating parts.")
+#     return os.path.dirname(file_path)
 
     # base_path = os.path.dirname(doc.FileName)
     # base_filename = os.path.splitext(os.path.basename(doc.FileName))[0]
@@ -206,7 +313,7 @@ def export_object_to_stl(obj, file_path, prefix=""):
         suffix = '.' + str(file_path).split('.')[-1]
         file_path_without_suffix = str(file_path).removesuffix(suffix)
         sanitized_label = ''.join(e for e in obj.Label if e.isalnum() or e in ['_', '-'])
-        filename = file_path_without_suffix + prefix + sanitized_label + ".stl"
+        filename = file_path_without_suffix + prefix + "__" + sanitized_label + ".stl"
         try:
             obj.Shape.exportStl(filename)
             App.Console.PrintMessage(f"Exported {filename}\n")
@@ -240,4 +347,4 @@ def convert_dir(path):
     return converted_parts_folder
 
 
-isolate_to_stl("../../data/baugruppen/vespa/src/vesp.stp")
+#time(isolate_to_stl("../../data/baugruppen/FINAL ELBOW MOLD.STEP"))
