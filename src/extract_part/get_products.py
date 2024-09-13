@@ -16,6 +16,7 @@ from src.io.step_io import extract_lines
 
 
 def get_products(lines, leaves):
+
     leaves_products = leaves[:, 4]
     product_ids = set()
     for le in leaves_products:       # collect unique ids
@@ -23,10 +24,28 @@ def get_products(lines, leaves):
     return product_ids
 
 
+def find_product_label(product_id: int, lines):
+    for line in lines:
+        if str(line).startswith('#' + str(product_id)):
+            content = str(line).split("'")[1].removeprefix(' ')
+            if content == 'UNKNOWN' or content == 'ANY' or content == '':
+                line_id = int(str(line).split(",")[2].removeprefix(' ').removeprefix('#'))
+                return find_product_label(line_id, lines)
+            else:
+                return content
+
+
+# lines = extract_lines("/home/user/PycharmProjects/bauteil_classification/data/baugruppen/Gepard Turm.STEP")
+# leaves = extract_leaves(lines)
+# pr_ids = get_products(lines, leaves)
+# print(find_product_label(list(pr_ids)[0], lines))
+
+
 def isolate_single_product_multiprocessor_portion(p_id, lines, leaves_product_ids, product_label, path_to_file, suffix):
     out_lines = isolate_single_product(p_id, lines.copy())
     out_lines = isolate_first_leaf(out_lines, extract_leaves(out_lines))
-    out_file = os.path.join(path_to_file.removesuffix(suffix), product_label + str(p_id) + suffix)
+    label = find_product_label(p_id, out_lines)
+    out_file = os.path.join(path_to_file.removesuffix(suffix), product_label + label + str(p_id) + suffix)
     write_file(out_lines, out_file)
     import_export(out_file)
 
@@ -170,4 +189,5 @@ def isolate_products_from_folder(path):
 #
 # # a, b = isolate_one_leaf(leaves[0][6].astype(int), "extr_136081.STEP")
 # write_file(lili, "extr_136081_.STEP")
-l = isolate_one_part_per_product("/home/user/PycharmProjects/bauteil_classification/data/baugruppen/Gepard Turm.STEP")
+# l = isolate_one_part_per_product("/home/user/PycharmProjects/bauteil_classification/data/baugruppen/Gepard Turm.STEP")
+# print(l)
