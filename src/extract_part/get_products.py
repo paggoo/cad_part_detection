@@ -10,13 +10,12 @@ import numpy as np
 
 from src.extract_part.extract_parts_and_shapes_to_STL import isolate_to_stl, retrieve_objects_from_freecad
 from src.extract_part.get_parts import extract_leaves, isolate_one_leaf, extract_solids, isolate_one_solid, \
-    isolate_single_product, delete_leaf, isolate_first_leaf, import_export
+    isolate_single_product, delete_leaf, isolate_first_leaf, import_export, isolate_all_solids
 from src.io.file_io import write_file
 from src.io.step_io import extract_lines
 
 
 def get_products(lines, leaves):
-
     leaves_products = leaves[:, 4]
     product_ids = set()
     for le in leaves_products:       # collect unique ids
@@ -32,7 +31,8 @@ def find_product_label(product_id: int, lines):
                 line_id = int(str(line).split(",")[2].removeprefix(' ').removeprefix('#'))
                 return find_product_label(line_id, lines)
             else:
-                return content
+                sanitized_label = ''.join(e for e in content if e.isalnum() or e in ['_', '-'])
+                return sanitized_label
 
 
 # lines = extract_lines("/home/user/PycharmProjects/bauteil_classification/data/baugruppen/Gepard Turm.STEP")
@@ -45,9 +45,10 @@ def isolate_single_product_multiprocessor_portion(p_id, lines, leaves_product_id
     out_lines = isolate_single_product(p_id, lines.copy())
     out_lines = isolate_first_leaf(out_lines, extract_leaves(out_lines))
     label = find_product_label(p_id, out_lines)
-    out_file = os.path.join(path_to_file.removesuffix(suffix), product_label + label + str(p_id) + suffix)
+    out_file = os.path.join(path_to_file.removesuffix(suffix), product_label + '_' + label + '_' + str(p_id) + suffix)
     write_file(out_lines, out_file)
     import_export(out_file)
+    return out_file
 
 
 def isolate_one_part_per_product(path_to_file: str):
@@ -62,7 +63,7 @@ def isolate_one_part_per_product(path_to_file: str):
     pool = multiprocessing.Pool()  # Automatically uses the number of available CPUs
 
     # Map product_ids to the processing function along with other static arguments
-    pool.starmap(
+    files = pool.starmap(
         isolate_single_product_multiprocessor_portion,
         zip(product_ids,
             [lines] * len(product_ids),  # Static argument for lines
@@ -76,6 +77,10 @@ def isolate_one_part_per_product(path_to_file: str):
     pool.close()
     pool.join()
 
+    folder = os.path.join(path_to_file.removesuffix(suffix))
+    # go through folder and isolate solids from each file
+    with multiprocessing.Pool() as pool:
+        pool.map(isolate_all_solids, files, chunksize=2)
     return os.path.join(path_to_file.removesuffix(suffix))
 
 
@@ -189,5 +194,5 @@ def isolate_products_from_folder(path):
 #
 # # a, b = isolate_one_leaf(leaves[0][6].astype(int), "extr_136081.STEP")
 # write_file(lili, "extr_136081_.STEP")
-# l = isolate_one_part_per_product("/home/user/PycharmProjects/bauteil_classification/data/baugruppen/Gepard Turm.STEP")
-# print(l)
+l = isolate_one_part_per_product("/home/user/PycharmProjects/bauteil_classification/data/baugruppen/Gepard Turm.STEP")
+print(l)

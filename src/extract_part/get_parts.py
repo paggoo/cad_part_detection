@@ -1,6 +1,8 @@
 #isolate every part
+import glob
 import pathlib
-
+import sys
+import platform
 import numpy as np
 import os
 
@@ -10,6 +12,23 @@ from src.io.step_io import extract_lines, extract_next_assembly_usage_occurrence
 from subprocess import PIPE, Popen
 
 
+if platform.system() == 'Windows':
+    FREECADPATH = glob.glob(r"C:\Program Files\FreeCAD *\bin")
+    FREECADPATH = FREECADPATH[0]
+    # print(FREECADPATH) #in case needed to confirm, uncomment
+
+elif platform.system() == 'Darwin':  # MacOS
+    FREECADPATH = '/Applications/FreeCAD.app/Contents/Resources/lib/'
+elif platform.system() == 'Linux':
+    FREECADPATH = '/usr/lib/freecad-python3/lib/'  # path to your FreeCAD.so or FreeCAD.dll file
+else:
+    print("Error: No recognized system available.")
+sys.path.append(FREECADPATH)
+import FreeCAD as App
+import Part
+import Mesh
+App.addImportType("STEP with colors (*.step *.stp)", "Import")
+
 def extract_solids(lines):
     solids = []
     for l in lines:
@@ -18,14 +37,14 @@ def extract_solids(lines):
     return solids
 
 
-def isolate_one_solid(solids, lines, output_path_and_name_WITH_EXTENSION, string=""):
+def isolate_one_solid(solids, lines, output_path_and_name_WITH_EXTENSION, solid_to_isolate_string=""):
     # isolate first solid
-    if string == "":
-        string = solids.pop()
+    if solid_to_isolate_string == "":
+        solid_to_isolate_string = solids.pop()
     # remove all solids but matching
-    solid_id = int(string.removeprefix('#').split('=')[0])
+    solid_id = int(solid_to_isolate_string.removeprefix('#').split('=')[0])
     for a in solids:
-        if string != a:
+        if solid_to_isolate_string != a:
             num_del_lines = 0
             #remove solid a from lines
             for i in range(len(lines) - 1):
@@ -40,8 +59,23 @@ def isolate_one_solid(solids, lines, output_path_and_name_WITH_EXTENSION, string
     os.makedirs(isolated_parts_folder, exist_ok=True)
     new_file_path_and_name = os.path.join(isolated_parts_folder, new_file_name)
     write_file(lines, new_file_path_and_name)
+
     import_export(new_file_path_and_name)
+
+    App.loadFile(new_file_path_and_name)
+    doc = App.activeDocument()
+    objects = [o for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids and not o.isDerivedFrom('PartDesign::Feature') and not hasattr(o, 'Type'))]
+    solid = objects[0]
+    solid.Shape.exportStl(new_file_path_and_name.removesuffix(suffix) + '.stl')
     return isolated_parts_folder
+
+
+def isolate_all_solids(path_to_file):
+    lines = extract_lines(path_to_file)
+    solids = extract_solids(lines)
+    for solid_to_isolate_string in solids:
+        folder = isolate_one_solid(solids, lines.copy(), path_to_file, solid_to_isolate_string)
+    return folder
 
 
 def extract_parts(lines):
@@ -410,3 +444,4 @@ def import_export(file_path):  # ((run freecad import export))
 #isolate_all_parts("../data/robo_cell.step")
 #analyse part 48,49, part 110,111
 
+# isolate_all_solids("/home/user/PycharmProjects/bauteil_classification/data/baugruppen/Gepard Turm/0_GepardTurm_175822.STEP")
