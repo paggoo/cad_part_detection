@@ -99,6 +99,21 @@ def find_duplicates_in_chunk(start_index, shapes_in_zero_placement, shapes_volum
                 # shapes_duplicates[b] = 1
 
 
+def retrieve_objects_from_freecad(file_path):
+    App.addImportType("STEP with colors (*.step *.stp)", "Import")
+    App.loadFile(file_path)
+    doc = App.activeDocument()
+
+    # shapes = [o.Shape for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids
+    #                                            and not o.isDerivedFrom('PartDesign::Feature')
+    #                                            and not hasattr(o, 'Type'))]
+    objects = [o for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids
+                                          and not o.isDerivedFrom('PartDesign::Feature')
+                                          and not hasattr(o, 'Type'))]
+    # labels = [o.Label for o in objects]
+    return objects
+
+
 def find_duplicates_for_pairs(a, b, shapes_in_zero_placement, shapes_volumes, labels, shapes_duplicates):
     sha_a = shapes_in_zero_placement[a]
     sha_b = shapes_in_zero_placement[b]
@@ -108,7 +123,8 @@ def find_duplicates_for_pairs(a, b, shapes_in_zero_placement, shapes_volumes, la
         shapes_duplicates[b] = 1
 
 
-def find_duplicate_shapes(shapes, labels):
+def find_duplicate_ojects(objects, labels):
+    shapes = [o.Shape for o in objects]
     with multiprocessing.Manager() as manager:
         # Use manager list for shared data between processes
         shapes_duplicates = manager.list([0] * len(shapes))
@@ -204,30 +220,30 @@ def remove_duplicates_multithreaded(shapes):
         concurrent.futures.wait(futures)
 
 
-def isolate_to_stl(file_path):
+def isolate_to_stl_excluding_freecad_duplicates(step_file_path):
     start_time = time.time()        #for performance measurements
-    file_path = os.path.abspath(file_path)
-    suffix = '.' + str(file_path).split('.')[-1]
-    without_suffix = str(file_path).removesuffix(suffix)
+    step_file_path = os.path.abspath(step_file_path)
+    suffix = '.' + str(step_file_path).split('.')[-1]
+    without_suffix = str(step_file_path).removesuffix(suffix)
 
-    print("Converting File: " + file_path)
+    print("Converting File: " + step_file_path)
     App.addImportType("STEP with colors (*.step *.stp)", "Import")
-    App.loadFile(file_path)
+    App.loadFile(step_file_path)
     doc = App.activeDocument()
 
-    shapes = [o.Shape for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids
-                                               and not o.isDerivedFrom('PartDesign::Feature')
-                                               and not hasattr(o, 'Type'))]
+    # shapes = [o.Shape for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids
+    #                                            and not o.isDerivedFrom('PartDesign::Feature')
+    #                                            and not hasattr(o, 'Type'))]
     objects = [o for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids
                                           and not o.isDerivedFrom('PartDesign::Feature')
                                           and not hasattr(o, 'Type'))]
     labels = [o.Label for o in objects]
 
     # Find duplicates in shapes using multiprocessing
-    duplicates = find_duplicate_shapes(shapes, labels)
+    duplicates = find_duplicate_ojects(objects, labels)
 
     # Remove duplicates
-    for i in range(len(shapes) - 1, -1, -1):
+    for i in range(len(objects) - 1, -1, -1):
         if duplicates[i]:
             objects.__delitem__(i)
 
@@ -235,14 +251,14 @@ def isolate_to_stl(file_path):
     print(f"{len(objects)} remaining parts.")
 
     for obj in objects:
-        export_object_to_stl(obj, file_path)
+        export_dir = export_object_to_stl(obj, step_file_path)
 
     print("done isolating parts.")
 
     end_time = time.time()
     execution_time = end_time - start_time
     print(f"Execution time: {execution_time} seconds")
-    return os.path.dirname(file_path)
+    return export_dir
 
 # def isolate_to_stl(file_path):
 #     file_path = os.path.abspath(file_path)
@@ -311,40 +327,46 @@ def export_object_to_stl(obj, file_path, prefix=""):
     if hasattr(obj, 'Shape') and obj.Shape.ShapeType == 'Solid' and hasattr(obj, 'Visibility') and obj.Visibility:
         # Remove any non-allowed characters from the label for file naming
         suffix = '.' + str(file_path).split('.')[-1]
-        file_path_without_suffix = str(file_path).removesuffix(suffix)
+        export_folder = str(file_path).removesuffix(suffix)
+        if not os.path.exists(export_folder):
+            os.makedirs(export_folder)
         sanitized_label = ''.join(e for e in obj.Label if e.isalnum() or e in ['_', '-'])
-        filename = file_path_without_suffix + prefix + "__" + sanitized_label + ".stl"
+        filename = os.path.join(export_folder, prefix + "__" + sanitized_label + ".stl")
         try:
             obj.Shape.exportStl(filename)
             App.Console.PrintMessage(f"Exported {filename}\n")
+            return export_folder
         except Exception as e:
             App.Console.PrintError(f"Error exporting {filename}: {str(e)}\n")
+    else:
+        print(obj)
+        print("object has no Attibute Shape.")
 
 
-def convert_dir(path):
-    #files = [f for f in listdir(filesPath) if isfile(join(filesPath, f))]
-    files = []
-    for file in pathlib.Path(path).rglob('*'):
-        if file.is_file():
-            suffix = str(file).split('.')[-1]
-            if suffix.lower() == 'stp' or suffix.lower() == 'step':
-                files.append(str(file))
-    totalFiles = len(files)
+# def convert_dir(path):
+#     #files = [f for f in listdir(filesPath) if isfile(join(filesPath, f))]
+#     files = []
+#     for file in pathlib.Path(path).rglob('*'):
+#         if file.is_file():
+#             suffix = str(file).split('.')[-1]
+#             if suffix.lower() == 'stp' or suffix.lower() == 'step':
+#                 files.append(str(file))
+#     totalFiles = len(files)
+#
+#     start_time = time.time()
+#
+#     pool = multiprocessing.Pool(multiprocessing.cpu_count())
+#     temp = partial(isolate_to_stl_excluding_freecad_duplicates)   #mapping works only if all files are in same root
+#     print("Pool info: ", pool)
+#     result = pool.map(func=temp, iterable=files, chunksize=1)
+#     pool.close()
+#     pool.join()
+#
+#     end_time = time.time()
+#     print('\n' + "Execution time: ")
+#     print(str(end_time - start_time) + " seconds" + '\n')
+#     converted_parts_folder = path
+#     return converted_parts_folder
 
-    start_time = time.time()
 
-    pool = multiprocessing.Pool(multiprocessing.cpu_count())
-    temp = partial(isolate_to_stl)   #mapping works only if all files are in same root
-    print("Pool info: ", pool)
-    result = pool.map(func=temp, iterable=files, chunksize=1)
-    pool.close()
-    pool.join()
-
-    end_time = time.time()
-    print('\n' + "Execution time: ")
-    print(str(end_time - start_time) + " seconds" + '\n')
-    converted_parts_folder = path
-    return converted_parts_folder
-
-
-#time(isolate_to_stl("../../data/baugruppen/FINAL ELBOW MOLD.STEP"))
+#isolate_to_stl_excluding_freecad_duplicates("../../data/convert/gt/screw_or_not/no_screw/from_assemblies/Gas turbine Assembly/4_CompressorBlades_24530_.STEP")

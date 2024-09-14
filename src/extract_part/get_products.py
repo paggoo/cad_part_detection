@@ -8,7 +8,7 @@ from functools import partial
 
 import numpy as np
 
-from src.extract_part.extract_parts_and_shapes_to_STL import isolate_to_stl, retrieve_objects_from_freecad
+from src.extract_part.extract_parts_and_shapes_to_STL import isolate_to_stl_excluding_freecad_duplicates, retrieve_objects_from_freecad
 from src.extract_part.get_parts import extract_leaves, isolate_one_leaf, extract_solids, isolate_one_solid, \
     isolate_single_product, delete_leaf, isolate_first_leaf, import_export, isolate_all_solids
 from src.io.file_io import write_file
@@ -80,7 +80,7 @@ def isolate_one_part_per_product(path_to_file: str):
     folder = os.path.join(path_to_file.removesuffix(suffix))
     # go through folder and isolate solids from each file
     with multiprocessing.Pool() as pool:
-        pool.map(isolate_all_solids, files, chunksize=2)
+        pool.map(isolate_to_stl_excluding_freecad_duplicates, files, chunksize=1)        # alternatively: isolate_all_solids
     return os.path.join(path_to_file.removesuffix(suffix))
 
 
@@ -113,7 +113,7 @@ def isolate_one_part_per_product_deprecated(file_name, solids_only=False, isolat
         if 0 == len(solids):
             print("could not find parts or solids in file: " + str(file_name))
             print("extraction via freecad. this might take long time. please be patient or choose assembly that is formatted according to standard")
-            isolate_to_stl(file_name)
+            isolate_to_stl_excluding_freecad_duplicates(file_name)
         else:
             for s in solids:
                 lines_copy = lines.copy()      # do not reuse lines, each isolation needs to start fresh
@@ -150,7 +150,7 @@ def isolate_products_from_folder(path):
         if file.is_file():
             suffix = str(file).split('.')[-1]
             if suffix.lower() == 'stp' or suffix.lower() == 'step':
-                isolate_to_stl(str(file))
+                isolate_to_stl_excluding_freecad_duplicates(str(file))
                 #isolate_one_part_per_product(str(file))
 
 
@@ -194,5 +194,5 @@ def isolate_products_from_folder(path):
 #
 # # a, b = isolate_one_leaf(leaves[0][6].astype(int), "extr_136081.STEP")
 # write_file(lili, "extr_136081_.STEP")
-l = isolate_one_part_per_product("/home/user/PycharmProjects/bauteil_classification/data/baugruppen/Gepard Turm.STEP")
-print(l)
+# l = isolate_one_part_per_product("/home/user/PycharmProjects/bauteil_classification/data/baugruppen/Gepard Turm.STEP")
+# print(l)
