@@ -9,7 +9,7 @@ from functools import partial
 
 from src.generate_datasets.merge_chunks import merge_chunks
 from src.point_cloud.stl_to_multiview import stl_to_multiview
-from build_dictionaries import make_screw_gt_dictionary
+from src.generate_ground_truth.build_dictionaries import make_screw_gt_dictionary
 
 
 def build_gt_dataset(path, num_views=3, view_size=80, chunk_size=100):  # saving every chunk_size samples reduces memory usage
@@ -89,5 +89,5 @@ def process_sample(line: str, view_size: int):
     return np.array(data), np.array(labels)
 
 
-build_gt_dataset("../../data/convert/gt/screw_or_not/")
+
 

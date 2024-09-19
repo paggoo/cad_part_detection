@@ -3,7 +3,6 @@ import pathlib
 import time
 import multiprocessing
 from functools import partial
-
 import os
 from os import listdir
 from os.path import isfile, join
@@ -12,26 +11,26 @@ import sys
 import glob
 
 
-if platform.system() == 'Windows':
-    FREECADPATH = glob.glob(r"C:\Program Files\FreeCAD *\bin")
-    FREECADPATH = FREECADPATH[0]
-    # print(FREECADPATH) #in case needed to confirm, uncomment
-
-elif platform.system() == 'Darwin':  # MacOS
-    FREECADPATH = '/Applications/FreeCAD.app/Contents/Resources/lib/'
-elif platform.system() == 'Linux':
-    FREECADPATH = '/usr/lib/freecad-python3/lib/'  # path to your FreeCAD.so or FreeCAD.dll file
-else:
-    print("Error: No recognized system available.")
-
-sys.path.append(FREECADPATH)
-import FreeCAD as App
-import Part
-import Mesh
-
 
 def converter(filesPath, totalFiles, file):
     # totalFiles is unused, was not able to put current number of process.
+
+    if platform.system() == 'Windows':
+        FREECADPATH = glob.glob(r"C:\Program Files\FreeCAD *\bin")
+        FREECADPATH = FREECADPATH[0]
+        # print(FREECADPATH) #in case needed to confirm, uncomment
+
+    elif platform.system() == 'Darwin':  # MacOS
+        FREECADPATH = '/Applications/FreeCAD.app/Contents/Resources/lib/'
+    elif platform.system() == 'Linux':
+        FREECADPATH = '/usr/lib/freecad-python3/lib/'  # path to your FreeCAD.so or FreeCAD.dll file
+    else:
+        print("Error: No recognized system available.")
+
+    sys.path.append(FREECADPATH)
+    import FreeCAD as App
+    import Part
+    import Mesh
 
     # if not os.path.exists(filesPath + "/Converted-STLs"):
     #     os.makedirs(filesPath + "/Converted-STLs")
@@ -50,9 +49,12 @@ def converter(filesPath, totalFiles, file):
         pf = doc.addObject("Part::Feature", "MyShape")
         pf.Shape = shape
         Mesh.export([pf], newName)
+    else:
+        print("STL file " + str(newName) + " exists. Doing nothing.")
     #os.replace(filesPath + "/" + file, filesPath + "/OriginalFiles/" + file)
 
 
+#deprecated. functionality now covered by src.extract_part.extract_parts_and_shapes_to_STL.isolate()
 def convert_dir(path):
     #files = [f for f in listdir(filesPath) if isfile(join(filesPath, f))]
     files = []
@@ -81,3 +83,5 @@ def convert_dir(path):
 
 # if __name__ == "__main__":
 #     main()
+
+# converter(None, None, "../../data/Monitor_25.stp")

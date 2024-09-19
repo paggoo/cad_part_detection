@@ -10,11 +10,12 @@ def get_lines(file):
 
 def write_file(lines, file):
     # file = os.path.join(os.path.dirname(file), Path(file).stem + "_new" + Path(file).suffix)
+    file = os.path.abspath(file)
     directory = os.path.dirname(file)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    write_out_file = open(file, "w")
-    write_out_file.writelines(lines)
-    write_out_file.close()
+    # Safely create the directory if it doesn't exist
+    os.makedirs(directory, exist_ok=True)
+
+    with open(file, "w") as write_out_file:
+        write_out_file.writelines(lines)
 
 

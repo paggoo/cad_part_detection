@@ -8,8 +8,7 @@ import os
 
 from src.extract_part.extract_parts_and_shapes_to_STL import retrieve_objects_from_freecad, export_object_to_stl
 from src.io.file_io import write_file
-from src.io.step_io import extract_lines, extract_next_assembly_usage_occurrence_params
-from subprocess import PIPE, Popen
+from src.io.step_io import extract_lines, extract_next_assembly_usage_occurrence_params, import_export
 
 
 if platform.system() == 'Windows':
@@ -28,6 +27,7 @@ import FreeCAD as App
 import Part
 import Mesh
 App.addImportType("STEP with colors (*.step *.stp)", "Import")
+
 
 def extract_solids(lines):
     solids = []
@@ -73,6 +73,7 @@ def isolate_one_solid(solids, lines, output_path_and_name_WITH_EXTENSION, solid_
 def isolate_all_solids(path_to_file):
     lines = extract_lines(path_to_file)
     solids = extract_solids(lines)
+    folder = os.path.dirname(path_to_file)
     for solid_to_isolate_string in solids:
         folder = isolate_one_solid(solids, lines.copy(), path_to_file, solid_to_isolate_string)
     return folder
@@ -96,7 +97,7 @@ def extract_parts(lines):
 
 def extract_leaves(lines):  # a part is leaf if not referenced by any other (following) part as parent
     parts = extract_parts(lines)
-    leaves = parts
+    leaves = parts                              # ATTENTION: when coming here from isolate_single_product_multipro_portion parts is empty!!!!!!!!
     deleted_counter = 0
     for n in range(len(parts)):      # we have to run n forward in order to exclude parents of parents
         product = parts[n][4]
@@ -106,7 +107,7 @@ def extract_leaves(lines):  # a part is leaf if not referenced by any other (fol
                 leaves = np.delete(leaves, n - deleted_counter, axis=0)
                 deleted_counter += 1
                 break
-    # generate uid for each leaf repopulating the part_id field in a way that ensures uniqueness
+#    generate uid for each leaf repopulating the part_id field in a way that ensures uniqueness
     for i in range(len(leaves)):
         leaves[i][0] = i
     return leaves
@@ -192,25 +193,34 @@ def delete_leaf(leaf_uid: int, leaves, lines, debug=False):
     return lines
 
 
-def isolate_first_leaf(lines, leaves):
-    leaf = leaves[0]
-    leaf_uid = leaf[6].astype(int)
-    deleted_lines = 0
-    for i in range(len(lines)):
-        li = str(lines[i - deleted_lines])
-        if li.__contains__('='):
-            entry_id = int(li.split('=')[0].removeprefix('#'))
-            linekey = li.split('=')[1].replace(' ', '')
-            if linekey.startswith("NEXT_ASSEMBLY_USAGE_OCCURRENCE"):  # NEXT_ASSEMBLY_USAGE_OCCURRENCE('id','name','...
-                # if lines[line].__contains__("PRODUCT_RELATED_PRODUCT_CATEGORY('part'") & lines[line].__contains__(str(curr_id)):  # vorige id
-                if leaf_uid != entry_id:
-                    lines.__delitem__(i - deleted_lines)
-                    deleted_lines += 1
+def isolate_first_leaf_or_solid(lines, leaves):
+    if len(leaves) != 0:
+        leaf = leaves[0]
+        leaf_uid = leaf[6].astype(int)
+        deleted_lines = 0
+        for i in range(len(lines)):
+            li = str(lines[i - deleted_lines])
+            if li.__contains__('='):
+                entry_id = int(li.split('=')[0].removeprefix('#'))
+                linekey = li.split('=')[1].replace(' ', '')
+                if linekey.startswith("NEXT_ASSEMBLY_USAGE_OCCURRENCE"):  # NEXT_ASSEMBLY_USAGE_OCCURRENCE('id','name','...
+                    # if lines[line].__contains__("PRODUCT_RELATED_PRODUCT_CATEGORY('part'") & lines[line].__contains__(str(curr_id)):  # vorige id
+                    if leaf_uid != entry_id:
+                        lines.__delitem__(i - deleted_lines)
+                        deleted_lines += 1
+    else:
+        solids = extract_solids(lines)
+        abspath = os.path.abspath("temp.step")
+        write_file(lines, abspath)
+        isolate_one_solid(solids, lines, abspath, solids[0])
+
     return lines
 
 
 def has_parent(part, parts):
     products = parts[:, 4]
+    if part is None:
+        return None
     for i in range(len(products)):
         if products[i] == part[3]:
             return parts[i]
@@ -218,22 +228,22 @@ def has_parent(part, parts):
 
 
 def isolate_single_product(product_id: int, lines, keep_all_parts_from_product=True):
-    first_part_from_product_found = False
+    # we want to return only one part
     parts = extract_parts(lines)
-    p = None                                # first part of the product
+    part = None                                # first part of the product
     part_products = [part[4].astype(int) for part in parts]
     for i in range(len(part_products)):
         if product_id == part_products[i]:
-            p = parts[i]
+            part = parts[i]
             break
-    bloodline = []
-    oldest_ancester = p
+    bloodline = []                                          # from child every parent until root
+    oldest_ancester = part
     bloodline.append(oldest_ancester[4].astype(int))
     while has_parent(oldest_ancester, parts) is not None:
         if oldest_ancester[3] != b'':
             bloodline.append(oldest_ancester[3].astype(int))
             oldest_ancester = has_parent(oldest_ancester, parts)
-    if oldest_ancester[3] != b'':
+    if oldest_ancester[3] != b'':                           # does oldest ancestor have parent
         bloodline.append(oldest_ancester[3].astype(int))
     deleted_lines = 0
     for i in range(len(lines)):
@@ -242,15 +252,14 @@ def isolate_single_product(product_id: int, lines, keep_all_parts_from_product=T
             entry_id = int(li.split('=')[0].removeprefix('#'))
             linekey = li.split('=')[1].replace(' ', '')
             if linekey.startswith("PRODUCT_DEFINITION('"):
-                if entry_id not in bloodline:
-                    lines.__delitem__(i - deleted_lines)
+                if entry_id not in bloodline:           # parent parts can be removed but products in bloodline can not!
+                    lines.__delitem__(i - deleted_lines)                # remove products that are no parents of part
                     deleted_lines += 1
             else:
                 if linekey.startswith("NEXT_ASSEMBLY_USAGE_OCCURRENCE"):  # NEXT_ASSEMBLY_USAGE_OCCURRENCE('id','name','...
                     # if lines[line].__contains__("PRODUCT_RELATED_PRODUCT_CATEGORY('part'") & lines[line].__contains__(str(curr_id)):  # vorige id
-                    if product_id != int(li.split(",")[4].removeprefix(' ').removeprefix('#') or first_part_from_product_found):
-                        lines.__delitem__(i - deleted_lines)
-                        first_part_from_product_found = True
+                    if entry_id != part[6].astype(int):
+                        lines.__delitem__(i - deleted_lines)            # remove all parts except part
                         deleted_lines += 1
     # for p in product_representatives_ids:
     #     if not product_id == p:
@@ -275,6 +284,18 @@ def extract_first_shape_to_stl_freecad(lines):      # due to inconsistent export
     write_file(lines, abs_path)
     objects = retrieve_objects_from_freecad(file_name)
     export_object_to_stl(objects[0], abs_path)
+
+
+def isolate_shells_via_freecad(path_to_file):
+    abs_path = os.path.abspath(path_to_file)
+    objects = retrieve_objects_from_freecad(path_to_file)
+    for obj in objects:
+        if hasattr(obj.Shape, 'ShapeType') and obj.Shape.ShapeType == 'Shell':
+            sanitized_label = ''.join(e for e in obj.Label if e.isalnum() or e in ['_', '-'])
+            filename = os.path.join(os.path.dirname(abs_path), pathlib.Path(abs_path).stem, sanitized_label + ".stl")
+            # export_object_to_stl(obj, filename, True)
+            obj.Shape.exportStl(filename)
+    return os.path.join(os.path.dirname(abs_path), pathlib.Path(abs_path).stem)
 
 
 def delete_product(entry_id: int, lines):
@@ -311,70 +332,58 @@ def delete_product(entry_id: int, lines):
 #     return lines
 
 
-def isolate_one_leaf(leaf_uid: int, file_name, debug=False):
-    #remove all leaves except one
-    lines = extract_lines(file_name)
-    leaves = extract_leaves(lines)
-    if len(leaves) == 0:
-        print("no parts.")
-        return
-    else:
-        if debug:
-            print(str(len(leaves)) + " leaves in total.")
-            print("attempting to isolate part: " + str(leaf_uid))
-    # delete all except the relevant leaf
-    while len(leaves) >= 1:
-        if leaf_uid != int(leaves[0, 6]):  # index does not have to increase because deletion
-            lines = delete_leaf(int(leaves[0, 6]), leaves, lines)
-            leaves = np.delete(leaves, 0, axis=0)
-        else:
-            leaf_id = leaves[0, 0].decode('utf8')
-            leaf_name = leaves[0, 1].decode('utf8')
-            leaf_product = leaves[0, 4].decode('utf8')
-            leaves = np.delete(leaves, 0, axis=0)
-    suffix = '.' + file_name.split('.')[-1]
-    # make directory for isolated parts
-    parts_dir = os.path.join(os.path.dirname(file_name), os.path.basename(file_name.removesuffix(suffix)))
-    os.makedirs(parts_dir, exist_ok=True)
-    try:
-        leaf_name
-    except NameError:   # 'leaf_name' not associated with a value
-        leaf_name = leaves[0, 1].decode('utf8')
-    if leaf_name is None:
-        print("check if leaves is empty")
-        return
-    else:
-        # product is always populated and should be used to prevent files being overwritten if leaf_name = ''
-        leaf_id = str(leaf_id).replace('/', '_').replace('\\', "_")  # file name must not contain folder seperators
-        leaf_name = str(leaf_name).replace('/', '_').replace('\\', "_")  # file name must not contain folder seperators
-        if str(leaf_id) == str(leaf_name):
-            name_before_import_export = os.path.basename(file_name.removesuffix(suffix) + "_" + str(leaf_uid) + '_' + leaf_name + '_' + leaf_product + "_raw" + suffix)
-        else:
-            name_before_import_export = os.path.basename(file_name.removesuffix(suffix) + "_" + str(leaf_uid) + '_' + leaf_id + "_" + leaf_name + '_' + leaf_product + "_raw" + suffix)
-        path_and_name_before_import_export = os.path.join(parts_dir, name_before_import_export)
-        write_file(lines, path_and_name_before_import_export)
-        isolated_parts_file = import_export(path_and_name_before_import_export)    # generate a valid minimized export
-        try:
-            exists = os.path.exists(path_and_name_before_import_export)
-            if exists:
-                pass
-                os.remove(path_and_name_before_import_export)
-        except:
-            pass    #file not there
-    return parts_dir, isolated_parts_file
-
-
-def import_export(file_path):  # ((run freecad import export))
-    full_file_path = os.path.abspath(file_path)
-    suffix = '.' + full_file_path.split('.')[-1]
-    output_path = full_file_path.removesuffix(suffix).removesuffix("_raw") + suffix
-    command = "import Part\n"
-    command += "s = Part.Shape()\n"
-    command += "s.read('" + str(full_file_path) + "')\n"
-    command += "s.exportStep('" + str(output_path) + "')\n"
-    command += "exit()\n"
-    Popen(['freecadcmd'], stdin=PIPE, text=True).communicate(command)
-    return output_path
+#deprecated
+# def isolate_one_leaf(leaf_uid: int, file_name, debug=False):
+#     #remove all leaves except one
+#     lines = extract_lines(file_name)
+#     leaves = extract_leaves(lines)
+#     if len(leaves) == 0:
+#         print("no parts.")
+#         return
+#     else:
+#         if debug:
+#             print(str(len(leaves)) + " leaves in total.")
+#             print("attempting to isolate part: " + str(leaf_uid))
+#     # delete all except the relevant leaf
+#     while len(leaves) >= 1:
+#         if leaf_uid != int(leaves[0, 6]):  # index does not have to increase because deletion
+#             lines = delete_leaf(int(leaves[0, 6]), leaves, lines)
+#             leaves = np.delete(leaves, 0, axis=0)
+#         else:
+#             leaf_id = leaves[0, 0].decode('utf8')
+#             leaf_name = leaves[0, 1].decode('utf8')
+#             leaf_product = leaves[0, 4].decode('utf8')
+#             leaves = np.delete(leaves, 0, axis=0)
+#     suffix = '.' + file_name.split('.')[-1]
+#     # make directory for isolated parts
+#     parts_dir = os.path.join(os.path.dirname(file_name), os.path.basename(file_name.removesuffix(suffix)))
+#     os.makedirs(parts_dir, exist_ok=True)
+#     try:
+#         leaf_name
+#     except NameError:   # 'leaf_name' not associated with a value
+#         leaf_name = leaves[0, 1].decode('utf8')
+#     if leaf_name is None:
+#         print("check if leaves is empty")
+#         return
+#     else:
+#         # product is always populated and should be used to prevent files being overwritten if leaf_name = ''
+#         leaf_id = str(leaf_id).replace('/', '_').replace('\\', "_")  # file name must not contain folder seperators
+#         leaf_name = str(leaf_name).replace('/', '_').replace('\\', "_")  # file name must not contain folder seperators
+#         if str(leaf_id) == str(leaf_name):
+#             name_before_import_export = os.path.basename(file_name.removesuffix(suffix) + "_" + str(leaf_uid) + '_' + leaf_name + '_' + leaf_product + "_raw" + suffix)
+#         else:
+#             name_before_import_export = os.path.basename(file_name.removesuffix(suffix) + "_" + str(leaf_uid) + '_' + leaf_id + "_" + leaf_name + '_' + leaf_product + "_raw" + suffix)
+#         path_and_name_before_import_export = os.path.join(parts_dir, name_before_import_export)
+#         write_file(lines, path_and_name_before_import_export)
+#         isolated_parts_file = import_export(path_and_name_before_import_export)    # generate a valid minimized export
+#         try:
+#             exists = os.path.exists(path_and_name_before_import_export)
+#             if exists:
+#                 pass
+#                 os.remove(path_and_name_before_import_export)
+#         except:
+#             pass    #file not there
+#     return parts_dir, isolated_parts_file
 
 
 # def isolate_all_parts(file_name):
@@ -391,57 +400,8 @@ def import_export(file_path):  # ((run freecad import export))
 #             isolate_one_solid(s, lines, file_name)
 
 
-# print (extract_part_names("../data/2balls small edit.step"))
-#import_export("../data/r301.step")
-#import_export("../data/r301-2.step")
-#import_export("../data/r301-3.step")
-#import_export("../data/r301-4.step")
 
-# l = delete_leaf(303, l)
-# l = delete_leaf(304, l)
-# l = delete_leaf(296, l)
-# l = delete_leaf(297, l)
-# l = delete_leaf(298, l)
-# l = delete_leaf(299, l)
-# l = delete_leaf(291, l)
-# l = delete_leaf(292, l)
-# l = delete_leaf(293, l)
-# l = delete_leaf(294, l)
-# l = delete_leaf(286, l)
-# l = delete_leaf(287, l)
-# l = delete_leaf(288, l)
-# l = delete_leaf(289, l)
-#import_export("../data/r289-304_raw.step")
-#l = delete_leaf('285', extract_lines("../data/robo_cell.step"))
-#l = delete_leaf(287, l)
-#l = delete_leaf(288, l)
-#l = delete_leaf(289, l)
-#write_file(l, "../data/r285__.step")
-#import_export("../data/r285__.step")
-#l = delete_leaf(281, extract_lines("../data/r285__n.step"))
-#l = delete_leaf(282, l)
-#l = delete_leaf('Ikea Lack:1', extract_lines("../data/3D_Printer_Enclosure_DanielDesigns.step"))
-
-#write_file(l, "../data/3d del1.step")
-#isolate_one_part(0, "../data/2balls small.step")
-#var = extract_part_names(extract_lines("../data/robo_cell.step"))
-#var2 = extract_part_names(extract_lines("../data/robo_cell_transformed_rem01.step"))
-#var3 = delete_leaf(256, extract_lines("../data/robo_cell.step"))
-#write_file(var3, "../data/robo_cell_del_leaf_256.step")
-#g = extract_leaves(extract_lines("../data/robo_cell_del_leaf_256.step"))
-#lines = extract_lines("../data/robo_cell.step")
-#e = extract_parts(lines)[1]
-#f = extract_leaves(lines)
-#var = extract_part_entry_ids(e, lines)
-
-#for i in range(305):
-    #l = delete_leaf(str(i), extract_lines("../data/robo_cell.step"))
-    #write_file(l, str(i)+".step")
-#    import_export("../data/test/"+str(i)+".step")
-
-
-#isolate_all_parts("../data/fusion_screw red, plain washer yellow, lock washer blue.step")
-#isolate_all_parts("../data/robo_cell.step")
-#analyse part 48,49, part 110,111
-
-# isolate_all_solids("/home/user/PycharmProjects/bauteil_classification/data/baugruppen/Gepard Turm/0_GepardTurm_175822.STEP")
+# # isolate_all_solids("/home/user/PycharmProjects/bauteil_classification/data/baugruppen/Gepard Turm/0_GepardTurm_175822.STEP")
+# lines = extract_lines("../../data/baugruppen/3d_printer/src/3D_Printer_Enclosure_DanielDesigns.step")
+# out_lines = isolate_single_product(103426, lines)
+# write_file(out_lines, "test.step")

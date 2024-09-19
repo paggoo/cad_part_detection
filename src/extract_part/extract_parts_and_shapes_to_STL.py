@@ -107,9 +107,7 @@ def retrieve_objects_from_freecad(file_path):
     # shapes = [o.Shape for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids
     #                                            and not o.isDerivedFrom('PartDesign::Feature')
     #                                            and not hasattr(o, 'Type'))]
-    objects = [o for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids
-                                          and not o.isDerivedFrom('PartDesign::Feature')
-                                          and not hasattr(o, 'Type'))]
+    objects = [o for o in doc.Objects if (hasattr(o, 'Shape') and not o.isDerivedFrom('PartDesign::Feature'))]
     # labels = [o.Label for o in objects]
     return objects
 
@@ -123,31 +121,35 @@ def find_duplicates_for_pairs(a, b, shapes_in_zero_placement, shapes_volumes, la
         shapes_duplicates[b] = 1
 
 
-def find_duplicate_ojects(objects, labels):
+def find_duplicate_ojects(objects, labels, shapes_duplicates, multiprocessor=True):
     shapes = [o.Shape for o in objects]
-    with multiprocessing.Manager() as manager:
-        # Use manager list for shared data between processes
-        shapes_duplicates = manager.list([0] * len(shapes))
-        shapes_volumes = [s.Volume for s in shapes]
-        print("calculated Volumes")
+    shapes_volumes = [s.Volume for s in shapes]
+    print("calculated Volumes")
 
+    if multiprocessor:
         # Parallelize shape transformation to zero placement
         with multiprocessing.Pool() as pool:
             shapes_in_zero_placement = pool.map(copy_and_transform_shape, shapes)
+    else:
+        shapes_in_zero_placement = [copy_and_transform_shape(s) for s in shapes]
 
-        print("transformed to zero placement")
+    print("transformed to zero placement")
 
-        # Generate all unique (a, b) pairs where a < b
-        all_pairs = list(combinations(range(len(shapes_in_zero_placement)), 2))
+    # Generate all unique (a, b) pairs where a < b
+    all_pairs = list(combinations(range(len(shapes_in_zero_placement)), 2))
 
-        # Prepare arguments for each pair to be passed to starmap
-        args = [(a, b, shapes_in_zero_placement, shapes_volumes, labels, shapes_duplicates) for a, b in all_pairs]
+    # Prepare arguments for each pair to be passed to starmap
+    args = [(a, b, shapes_in_zero_placement, shapes_volumes, labels, shapes_duplicates) for a, b in all_pairs]
 
+    if multiprocessor:
         # Parallelize the pairwise comparison across multiple processes
         with multiprocessing.Pool() as pool:
             pool.starmap(find_duplicates_for_pairs, args)
+    else:
+        for arg in args:
+            find_duplicates_for_pairs(*arg)
 
-        return np.array(shapes_duplicates)
+    return np.array(shapes_duplicates)
 
 
 def copy_and_transform_shape(s):
@@ -220,8 +222,8 @@ def remove_duplicates_multithreaded(shapes):
         concurrent.futures.wait(futures)
 
 
-def isolate_to_stl_excluding_freecad_duplicates(step_file_path):
-    start_time = time.time()        #for performance measurements
+def isolate_to_stl_excluding_freecad_duplicates(step_file_path, multiprocessor=False):
+    start_time = time.time()        # For performance measurements
     step_file_path = os.path.abspath(step_file_path)
     suffix = '.' + str(step_file_path).split('.')[-1]
     without_suffix = str(step_file_path).removesuffix(suffix)
@@ -231,16 +233,19 @@ def isolate_to_stl_excluding_freecad_duplicates(step_file_path):
     App.loadFile(step_file_path)
     doc = App.activeDocument()
 
-    # shapes = [o.Shape for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids
-    #                                            and not o.isDerivedFrom('PartDesign::Feature')
-    #                                            and not hasattr(o, 'Type'))]
-    objects = [o for o in doc.Objects if (hasattr(o, 'Shape') and o.Shape.Solids
-                                          and not o.isDerivedFrom('PartDesign::Feature')
-                                          and not hasattr(o, 'Type'))]
+    objects = [o for o in doc.Objects if hasattr(o, 'Shape')]   #  and o.Shape.Solids and not o.isDerivedFrom('PartDesign::Feature') and not hasattr(o, 'Type')
     labels = [o.Label for o in objects]
 
-    # Find duplicates in shapes using multiprocessing
-    duplicates = find_duplicate_ojects(objects, labels)
+    if multiprocessor:
+        # Move Manager outside of the pool
+        manager = multiprocessing.Manager()
+        shapes_duplicates = manager.list([0] * len(objects))  # Use shared list
+
+        # Find duplicates using multiprocessing
+        duplicates = find_duplicate_ojects(objects, labels, shapes_duplicates)
+    else:
+        shapes_duplicates = []
+        duplicates = find_duplicate_ojects(objects, labels, shapes_duplicates)
 
     # Remove duplicates
     for i in range(len(objects) - 1, -1, -1):
@@ -250,6 +255,7 @@ def isolate_to_stl_excluding_freecad_duplicates(step_file_path):
     print(f"{sum(duplicates)} duplicates removed.")
     print(f"{len(objects)} remaining parts.")
 
+    export_dir = None
     for obj in objects:
         export_dir = export_object_to_stl(obj, step_file_path)
 
@@ -259,6 +265,7 @@ def isolate_to_stl_excluding_freecad_duplicates(step_file_path):
     execution_time = end_time - start_time
     print(f"Execution time: {execution_time} seconds")
     return export_dir
+
 
 # def isolate_to_stl(file_path):
 #     file_path = os.path.abspath(file_path)
@@ -323,8 +330,12 @@ def isolate_to_stl_excluding_freecad_duplicates(step_file_path):
     #     os.makedirs(export_folder)
 
 
-def export_object_to_stl(obj, file_path, prefix=""):
-    if hasattr(obj, 'Shape') and obj.Shape.ShapeType == 'Solid' and hasattr(obj, 'Visibility') and obj.Visibility:
+def export_object_to_stl(obj, file_path, prefix="", export_shells=False):
+    if export_shells:
+        var = hasattr(obj, 'Shape')
+    else:
+        var = hasattr(obj, 'Shape') and obj.Shape.ShapeType == 'Solid' and hasattr(obj, 'Visibility') and obj.Visibility
+    if var:
         # Remove any non-allowed characters from the label for file naming
         suffix = '.' + str(file_path).split('.')[-1]
         export_folder = str(file_path).removesuffix(suffix)
@@ -332,12 +343,10 @@ def export_object_to_stl(obj, file_path, prefix=""):
             os.makedirs(export_folder)
         sanitized_label = ''.join(e for e in obj.Label if e.isalnum() or e in ['_', '-'])
         filename = os.path.join(export_folder, prefix + "__" + sanitized_label + ".stl")
-        try:
-            obj.Shape.exportStl(filename)
-            App.Console.PrintMessage(f"Exported {filename}\n")
-            return export_folder
-        except Exception as e:
-            App.Console.PrintError(f"Error exporting {filename}: {str(e)}\n")
+
+        obj.Shape.exportStl(filename)
+        App.Console.PrintMessage(f"Exported {filename}\n")
+        return export_folder
     else:
         print(obj)
         print("object has no Attibute Shape.")

@@ -1,3 +1,6 @@
+import os
+from subprocess import Popen, PIPE
+
 import numpy as np
 
 from src.io.file_io import get_lines, write_file
@@ -9,13 +12,16 @@ def extract_lines(file_name):  # regex matching would prevent from part names th
         lines = get_lines(file_name)
     except:
         print("ERROR reading file: non UTF-8 character encountered: " + str(file_name))
-        return None
+        print("trying import export...")
+        import_export(file_name)
+        lines = get_lines(file_name)
     if lines is not None:
         line_buf = ""
         lines_res = []
         entry_complete = True
         for line_id in range(len(lines)):
             line = lines[line_id]
+            line = ''.join([c if ord(c) < 128 else '_' for c in line])
             line_buf += line.removesuffix('\n')
             if line_buf.endswith(';'):  # and lines[line_id + 1].startswith("#"):
                 lines_res.append(line_buf + '\n')
@@ -35,6 +41,19 @@ def extract_data(lines):  # data segment of step file
                 if lines[l] == "ENDSEC;\n":
                     data_lines.__delitem__(slice(l, -0))
                     return data_lines
+
+
+def import_export(file_path, out_path=None):  # ((run freecad import export))
+    full_file_path = os.path.abspath(file_path)
+    suffix = '.' + full_file_path.split('.')[-1]
+    output_path = full_file_path.removesuffix(suffix).removesuffix("_raw") + suffix
+    command = "import Part\n"
+    command += "s = Part.Shape()\n"
+    command += "s.read('" + str(full_file_path) + "')\n"
+    command += "s.exportStep('" + str(output_path) + "')\n"
+    command += "exit()\n"
+    Popen(['freecadcmd'], stdin=PIPE, text=True).communicate(command)
+    return output_path
 
 
 def extract_next_assembly_usage_occurrence_params(line):
