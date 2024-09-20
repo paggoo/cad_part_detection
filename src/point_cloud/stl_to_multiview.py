@@ -75,6 +75,11 @@ def get_array(mesh: pv.PolyData, view_size: int):
     x, y, z = np.meshgrid(x, y, z)
 
     # Create unstructured grid from the structured grid
+    # conversion is lossless
+    # advantage of unstructured grid: built-in enclosed_points_extraction for precise surface extraction
+    # alternative to converting back and forth to structured binary array would be:
+    # feeding the structured grid directly into a 3d cnn
+    # but since according to literature 2d multi-view performs better this was chosen
     grid = pv.StructuredGrid(x, y, z)
     ugrid = pv.UnstructuredGrid(grid)
 
